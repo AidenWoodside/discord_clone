@@ -12,7 +12,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
-      enableRemoteModule: false,
+
       contextIsolation: true,
       sandbox: true,
       preload: join(__dirname, '../preload/index.js'),

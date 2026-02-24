@@ -12,7 +12,7 @@ export function Button({
   children,
   ...props
 }: ButtonProps): JSX.Element {
-  const baseStyles = 'inline-flex items-center justify-center rounded-default font-medium transition-colors';
+  const baseStyles = 'inline-flex items-center justify-center rounded-default font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary';
   const variantStyles = {
     primary: 'bg-accent-primary text-text-primary hover:bg-accent-hover',
     secondary: 'bg-bg-secondary text-text-primary hover:bg-bg-hover',

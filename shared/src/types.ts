@@ -3,6 +3,7 @@ export interface User {
   username: string;
   displayName: string;
   avatarUrl?: string;
+  role: 'owner' | 'user';
   status: 'online' | 'idle' | 'dnd' | 'offline';
   publicKey: string;
   createdAt: string;

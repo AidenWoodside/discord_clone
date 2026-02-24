@@ -24,14 +24,14 @@ so that I have a working development environment with all foundational tooling c
   - [x] 1.3 Create `.gitignore` (node_modules, dist, build, .env, data/sqlite, *.log, .DS_Store)
   - [x] 1.4 Create `.env.example` with server environment variable template
   - [x] 1.5 Create root `.prettierrc.json` (semi: true, singleQuote: true, printWidth: 100, tabWidth: 2, trailingComma: es5)
-  - [x] 1.6 Create root ESLint config with TypeScript and React plugins
-  - [x] 1.7 Add root dev dependencies: `concurrently`, `prettier`, `typescript@5.9.x`, `eslint`, `@typescript-eslint/parser`, `@typescript-eslint/eslint-plugin`
+  - [x] 1.6 Create root ESLint config with TypeScript and React Hooks plugins
+  - [x] 1.7 Add root dev dependencies: `concurrently`, `prettier`, `typescript@5.9.x`, `eslint`, `@typescript-eslint/parser`, `@typescript-eslint/eslint-plugin`, `eslint-plugin-react-hooks`
   - [x] 1.8 Add root scripts: `dev` (concurrently client+server), `dev:client`, `dev:server`, `build`, `test`, `lint`, `format`
 
 - [x] Task 2: Scaffold Electron client with electron-vite (AC: 2, 5)
   - [x] 2.1 Run `npm create @quick-start/electron@latest client -- --template react-ts` to scaffold the client workspace
   - [x] 2.2 Verify `electron.vite.config.ts` has main/preload/renderer sections
-  - [x] 2.3 Configure Electron BrowserWindow security: `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, `enableRemoteModule: false`
+  - [x] 2.3 Configure Electron BrowserWindow security: `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`
   - [x] 2.4 Set minimum window size to 960x540 in main process
   - [x] 2.5 Create preload script with contextBridge skeleton exposing `window.api` namespace
   - [x] 2.6 Verify `npm run dev` in client launches Electron with Vite HMR
@@ -48,7 +48,7 @@ so that I have a working development environment with all foundational tooling c
 
 - [x] Task 4: Install and configure Radix UI (AC: 5)
   - [x] 4.1 Install unified `radix-ui` package in client
-  - [x] 4.2 Create placeholder component wrappers in `client/src/renderer/src/components/` for: Button, Input, Modal (Dialog), ContextMenu, DropdownMenu, Tooltip, ScrollArea
+  - [x] 4.2 Create placeholder component wrappers in `client/src/renderer/src/components/` for: Button, Input, Modal (Dialog), ContextMenu, DropdownMenu, Tooltip, ScrollArea with barrel export `index.ts`
   - [x] 4.3 Verify Radix primitives import and render correctly
 
 - [x] Task 5: Scaffold Fastify server (AC: 3)
@@ -99,7 +99,7 @@ so that I have a working development environment with all foundational tooling c
 
 | Package | Version | Notes |
 |---------|---------|-------|
-| electron-vite | 5.0.0 | ESM package; scaffold with `npm create @quick-start/electron@latest` |
+| electron-vite | 3.1.0 | ESM package; scaffold with `npm create @quick-start/electron@latest` |
 | Electron | 40.x | Latest stable 40.6.0; rebuild native modules with `@electron/rebuild` |
 | Fastify | 5.7.x | Requires Node.js 20+; async plugin registration |
 | TypeScript | 5.9.3 | Use stable; 6.0 beta not recommended yet |
@@ -191,12 +191,13 @@ Every BrowserWindow MUST enforce:
 ```typescript
 webPreferences: {
   nodeIntegration: false,
-  enableRemoteModule: false,
   contextIsolation: true,
   sandbox: true,
   preload: path.join(__dirname, '../preload/index.js'),
 }
 ```
+
+Note: `enableRemoteModule` was removed in Electron 14 and is not a valid option in Electron 40.x.
 
 The preload script exposes a controlled `window.api` surface via `contextBridge.exposeInMainWorld`. Never expose raw IPC or Node.js APIs to the renderer.
 
@@ -343,6 +344,7 @@ For this story, create only the skeleton structure with entry points. Feature di
 
 - 2026-02-24: Story implementation complete - Full monorepo scaffold with client (Electron+React+Tailwind+Radix), server (Fastify), and shared types package. All tests passing (5 total across 3 workspaces). TypeScript strict mode, ESLint, Prettier, Vitest all configured.
 - 2026-02-24: Code review fixes applied (11 issues) — added shared build script, installed pino-pretty, aligned WsMessage with architecture spec, enforced no-explicit-any as error, added plugin skeleton to server app, fixed Fastify test cleanup, moved TooltipProvider to app root, configured jest-dom setup file, documented type scale and Radix Button/Input decisions.
+- 2026-02-24: Code review #2 fixes applied (9 issues) — installed eslint-plugin-react-hooks and configured in flat config, added `role` field to User type, excluded dist/ from shared vitest, fixed weak App.test assertion to use toBeInTheDocument(), added focus-visible ring to Button, created components barrel export, connected Input label via useId(), removed obsolete enableRemoteModule, corrected electron-vite version in dev notes.
 
 ## Dev Agent Record
 
@@ -365,10 +367,13 @@ Claude Opus 4.6
 - 5 tests across 3 workspaces all passing (shared: 3, server: 1, client: 1)
 - TypeScript strict mode verified via `tsc --noEmit` for server and shared
 - Fastify health endpoint verified with live curl test: `{"data":{"status":"ok"}}`
-- ESLint (flat config v9) and Prettier both pass without errors
-- Radix UI unified package installed with 7 component wrappers: Button, Input, Modal, ContextMenu, DropdownMenu, Tooltip, ScrollArea
+- ESLint (flat config v9) with TypeScript and React Hooks plugins, Prettier both pass without errors
+- Radix UI unified package installed with 7 component wrappers + barrel export: Button, Input, Modal, ContextMenu, DropdownMenu, Tooltip, ScrollArea
 - Tailwind CSS v4 configured with full warm earthy color palette from UX spec, system font stack, and border-radius tokens
-- Electron BrowserWindow security: nodeIntegration:false, contextIsolation:true, sandbox:true, enableRemoteModule:false
+- Electron BrowserWindow security: nodeIntegration:false, contextIsolation:true, sandbox:true
+- Button component includes focus-visible ring for keyboard accessibility
+- Input component uses useId() for proper label-input association (a11y)
+- User shared type includes `role: 'owner' | 'user'` per architecture spec
 
 ### File List
 
@@ -417,3 +422,4 @@ New files:
 - shared/src/ws-messages.ts
 - shared/src/constants.ts
 - shared/src/constants.test.ts
+- client/src/renderer/src/components/index.ts

@@ -1,9 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { type FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 
 describe('Server App', () => {
+  let app: FastifyInstance;
+
+  afterEach(async () => {
+    await app.close();
+  });
+
   it('should return health check response', async () => {
-    const app = buildApp();
+    app = buildApp();
 
     const response = await app.inject({
       method: 'GET',

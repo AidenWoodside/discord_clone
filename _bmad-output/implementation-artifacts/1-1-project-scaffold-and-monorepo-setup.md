@@ -1,6 +1,6 @@
 # Story 1.1: Project Scaffold & Monorepo Setup
 
-Status: review
+Status: done
 
 ## Story
 
@@ -342,6 +342,7 @@ For this story, create only the skeleton structure with entry points. Feature di
 ## Change Log
 
 - 2026-02-24: Story implementation complete - Full monorepo scaffold with client (Electron+React+Tailwind+Radix), server (Fastify), and shared types package. All tests passing (5 total across 3 workspaces). TypeScript strict mode, ESLint, Prettier, Vitest all configured.
+- 2026-02-24: Code review fixes applied (11 issues) — added shared build script, installed pino-pretty, aligned WsMessage with architecture spec, enforced no-explicit-any as error, added plugin skeleton to server app, fixed Fastify test cleanup, moved TooltipProvider to app root, configured jest-dom setup file, documented type scale and Radix Button/Input decisions.
 
 ## Dev Agent Record
 
@@ -355,6 +356,8 @@ Claude Opus 4.6
 - `workspace:*` protocol not supported by npm workspaces; changed to `"*"` for inter-package references.
 - Electron download required `TMPDIR=/tmp` to work around sandbox temp directory permission restrictions.
 - Tailwind v4 spacing tokens: built-in 4px grid system used (default rem-based scale); no custom `@theme` spacing entries needed.
+- Tailwind v4 type scale tokens (Task 3.5): built-in `text-xs` through `text-xl` utilities already use the correct scale; custom `@theme` font-size entries would shadow defaults with identical values, so omitted intentionally.
+- Radix UI unified package (v1.4.3) does not include Button or Input primitives (those are Radix Themes, a separate styled layer). Button and Input components are implemented as custom styled HTML elements with Tailwind. Modal, ContextMenu, DropdownMenu, Tooltip, and ScrollArea use Radix primitives.
 
 ### Completion Notes List
 
@@ -371,6 +374,7 @@ Claude Opus 4.6
 
 New files:
 - package.json
+- package-lock.json
 - tsconfig.base.json
 - .gitignore
 - .env.example
@@ -383,6 +387,7 @@ New files:
 - client/tsconfig.node.json
 - client/tsconfig.web.json
 - client/vitest.config.ts
+- client/vitest.setup.ts
 - client/src/main/index.ts
 - client/src/preload/index.ts
 - client/src/preload/index.d.ts

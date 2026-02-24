@@ -11,6 +11,16 @@ export function buildApp(): FastifyInstance {
     },
   });
 
+  // --- Plugin Registration ---
+  // Domain plugins will be registered here:
+  // app.register(authPlugin);
+  // app.register(channelRoutes);
+  // app.register(messageRoutes);
+  // app.register(voicePlugin);
+  // app.register(adminRoutes);
+  // app.register(inviteRoutes);
+  // app.register(presencePlugin);
+
   app.get('/api/health', async () => {
     return { data: { status: 'ok' } };
   });

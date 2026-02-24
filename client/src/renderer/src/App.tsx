@@ -1,4 +1,5 @@
 import { HashRouter, Routes, Route } from 'react-router';
+import { Tooltip as RadixTooltip } from 'radix-ui';
 
 function Home(): JSX.Element {
   return (
@@ -10,11 +11,13 @@ function Home(): JSX.Element {
 
 function App(): JSX.Element {
   return (
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<Home />} />
-      </Routes>
-    </HashRouter>
+    <RadixTooltip.Provider>
+      <HashRouter>
+        <Routes>
+          <Route path="/" element={<Home />} />
+        </Routes>
+      </HashRouter>
+    </RadixTooltip.Provider>
   );
 }
 

@@ -1,8 +1,7 @@
 export interface WsMessage<T = unknown> {
-  id: string;
   type: string;
   payload: T;
-  timestamp: string;
+  id?: string;
 }
 
 // Text messaging

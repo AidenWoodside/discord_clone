@@ -49,7 +49,7 @@ const useAuthStore = create<AuthState>((set, get) => {
     user: null,
     accessToken: null,
     refreshToken: null,
-    isLoading: false,
+    isLoading: true,
     error: null,
 
     login: async (username: string, password: string) => {
@@ -166,7 +166,7 @@ const useAuthStore = create<AuthState>((set, get) => {
           // Decode user info from the new access token (JWT payload)
           const payload = JSON.parse(atob(data.accessToken.split('.')[1]));
           set({
-            user: { id: payload.userId, username: payload.username || '', role: payload.role },
+            user: { id: payload.userId, username: payload.username, role: payload.role },
             accessToken: data.accessToken,
             refreshToken: data.refreshToken,
             isLoading: false,

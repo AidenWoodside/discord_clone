@@ -425,7 +425,7 @@ describe('authRoutes', () => {
       const { id: ownerId } = await seedOwner(app);
 
       // Create a refresh token and session manually with expired date
-      const refreshToken = generateRefreshToken({ userId: ownerId, role: 'owner' });
+      const refreshToken = generateRefreshToken({ userId: ownerId, role: 'owner', username: 'owner' });
       const tokenHash = hashToken(refreshToken);
       app.db.insert(sessions).values({
         user_id: ownerId,

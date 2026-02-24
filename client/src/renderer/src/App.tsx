@@ -25,6 +25,7 @@ function App(): React.ReactNode {
       <HashRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register/:token" element={<div className="flex h-screen items-center justify-center bg-bg-primary"><p className="text-text-primary">Registration coming soon.</p></div>} />
           <Route path="/app" element={<AuthGuard />}>
             <Route index element={<MainApp />} />
           </Route>

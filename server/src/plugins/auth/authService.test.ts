@@ -37,7 +37,7 @@ describe('authService', () => {
 
   describe('generateAccessToken / verifyAccessToken', () => {
     it('should generate and verify a token roundtrip', () => {
-      const payload = { userId: 'user-123', role: 'user' };
+      const payload = { userId: 'user-123', role: 'user', username: 'testuser' };
       const token = generateAccessToken(payload);
       const decoded = verifyAccessToken(token);
 
@@ -53,7 +53,7 @@ describe('authService', () => {
     });
 
     it('should fail verification with a tampered token', () => {
-      const token = generateAccessToken({ userId: 'user-1', role: 'user' });
+      const token = generateAccessToken({ userId: 'user-1', role: 'user', username: 'testuser1' });
       const tampered = token.slice(0, -5) + 'XXXXX';
       expect(() => verifyAccessToken(tampered)).toThrow();
     });
@@ -61,7 +61,7 @@ describe('authService', () => {
 
   describe('generateRefreshToken / verifyRefreshToken', () => {
     it('should generate and verify a refresh token roundtrip', () => {
-      const payload = { userId: 'user-456', role: 'user' };
+      const payload = { userId: 'user-456', role: 'user', username: 'testuser456' };
       const token = generateRefreshToken(payload);
       const decoded = verifyRefreshToken(token);
 
@@ -77,12 +77,12 @@ describe('authService', () => {
     });
 
     it('should fail verification with an access token (wrong secret)', () => {
-      const accessToken = generateAccessToken({ userId: 'user-1', role: 'user' });
+      const accessToken = generateAccessToken({ userId: 'user-1', role: 'user', username: 'testuser1' });
       expect(() => verifyRefreshToken(accessToken)).toThrow();
     });
 
     it('should fail verification with a tampered token', () => {
-      const token = generateRefreshToken({ userId: 'user-1', role: 'user' });
+      const token = generateRefreshToken({ userId: 'user-1', role: 'user', username: 'testuser1' });
       const tampered = token.slice(0, -5) + 'XXXXX';
       expect(() => verifyRefreshToken(tampered)).toThrow();
     });

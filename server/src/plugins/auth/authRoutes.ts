@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { users, invites, bans } from '../../db/schema.js';
 import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken, hashToken, verifyRefreshToken } from './authService.js';
 import { validateInvite } from '../invites/inviteService.js';
-import { createSession, findSessionByTokenHash, deleteSession } from './sessionService.js';
+import { createSession, findSessionByTokenHash, deleteSession, cleanExpiredSessions } from './sessionService.js';
 import { getAuthenticatedUser } from './authMiddleware.js';
 
 interface RegisterBody {
@@ -27,6 +27,18 @@ interface LogoutBody {
 }
 
 export default fp(async (fastify: FastifyInstance) => {
+  // Clean up expired sessions on startup
+  fastify.addHook('onReady', async () => {
+    try {
+      const deleted = cleanExpiredSessions(fastify.db);
+      if (deleted > 0) {
+        fastify.log.info(`Cleaned ${deleted} expired session(s)`);
+      }
+    } catch {
+      // Sessions table may not exist yet (pre-migration)
+    }
+  });
+
   // POST /api/auth/register — PUBLIC
   fastify.post<{ Body: RegisterBody }>('/api/auth/register', {
     schema: {
@@ -199,7 +211,7 @@ export default fp(async (fastify: FastifyInstance) => {
     }
 
     // 4. Generate tokens
-    const tokenPayload = { userId: user.id, role: user.role };
+    const tokenPayload = { userId: user.id, role: user.role, username: user.username };
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
 
@@ -264,7 +276,7 @@ export default fp(async (fastify: FastifyInstance) => {
     // 4. Token rotation: delete old session, create new session with new tokens
     deleteSession(fastify.db, session.id);
 
-    const tokenPayload = { userId: payload.userId, role: payload.role };
+    const tokenPayload = { userId: payload.userId, role: payload.role, username: payload.username };
     const newAccessToken = generateAccessToken(tokenPayload);
     const newRefreshToken = generateRefreshToken(tokenPayload);
 

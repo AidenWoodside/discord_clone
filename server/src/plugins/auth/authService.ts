@@ -17,6 +17,7 @@ if (!JWT_REFRESH_SECRET) {
 export interface JwtPayload {
   userId: string;
   role: string;
+  username: string;
   iat: number;
   exp: number;
 }
@@ -29,25 +30,25 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
-export function generateAccessToken(payload: { userId: string; role: string }): string {
+export function generateAccessToken(payload: { userId: string; role: string; username: string }): string {
   return jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: '15m' });
 }
 
 export function verifyAccessToken(token: string): JwtPayload {
   const decoded = jwt.verify(token, JWT_ACCESS_SECRET);
-  if (typeof decoded === 'string' || !decoded.userId || !decoded.role) {
+  if (typeof decoded === 'string' || !decoded.userId || !decoded.role || !decoded.username) {
     throw new Error('Invalid token payload structure');
   }
   return decoded as JwtPayload;
 }
 
-export function generateRefreshToken(payload: { userId: string; role: string }): string {
+export function generateRefreshToken(payload: { userId: string; role: string; username: string }): string {
   return jwt.sign({ ...payload, jti: crypto.randomUUID() }, JWT_REFRESH_SECRET, { expiresIn: '7d' });
 }
 
 export function verifyRefreshToken(token: string): JwtPayload {
   const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
-  if (typeof decoded === 'string' || !decoded.userId || !decoded.role) {
+  if (typeof decoded === 'string' || !decoded.userId || !decoded.role || !decoded.username) {
     throw new Error('Invalid token payload structure');
   }
   return decoded as JwtPayload;

@@ -1,6 +1,6 @@
 # Story 1.4: User Login, Logout & Session Management
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -404,6 +404,11 @@ client/src/renderer/src/App.tsx              # Update routes (login, auth guard)
 .env.example                                 # Add JWT_REFRESH_SECRET
 ```
 
+### Deferred / Known Gaps
+
+- **AC 4 "last-viewed channel":** The AC states "the app loads to the last-viewed channel" but channels are not built until story 1.6. When channels are implemented, persist last-viewed channel ID to safeStorage and restore it in `restoreSession`.
+- **Ban session invalidation:** When the ban endpoint is built (Epic 5), it MUST call `deleteUserSessions(db, userId)` to immediately invalidate all sessions for the banned user. The function exists in `sessionService.ts` for this purpose.
+
 ### Alignment with Architecture Doc
 
 - JWT access (15min) + refresh (7d) tokens per architecture decision table [Source: architecture.md#Authentication-Security]
@@ -509,6 +514,7 @@ Claude Opus 4.6
 ### Change Log
 
 - 2026-02-24: Implemented story 1-4 — User Login, Logout & Session Management. Added JWT refresh tokens with rotation, DB-backed sessions, Electron safeStorage bridge, API client with auto-refresh, Zustand auth store, LoginPage, AuthGuard, and comprehensive tests (86 server + 1 client = 87 total).
+- 2026-02-24: Code review fixes — 10 issues found (3 HIGH, 4 MEDIUM, 3 LOW). Fixed: JWT payload now includes username (restoreSession was losing it), isLoading initialized true (race condition broke auto-login), added /register/:token placeholder route, replaced AuthGuard spinner with skeleton, removed redundant onKeyDown, added cleanExpiredSessions on startup. Deferred: AC 4 "last-viewed channel" depends on story 1.6 channel system. Ban session invalidation (deleteUserSessions) deferred to ban endpoint story (Epic 5).
 
 ### File List
 
@@ -537,4 +543,5 @@ Claude Opus 4.6
 - client/src/renderer/src/App.tsx (updated routes with login, auth guard)
 - client/src/renderer/src/App.test.tsx (updated for login page, mocked secureStorage)
 - client/package.json (added zustand dependency)
+- package-lock.json (updated from zustand dependency addition)
 - _bmad-output/implementation-artifacts/sprint-status.yaml (status: in-progress → review)

@@ -25,12 +25,6 @@ export function LoginPage(): React.ReactNode {
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent): void {
-    if (e.key === 'Enter' && canSubmit) {
-      handleSubmit(e);
-    }
-  }
-
   return (
     <div className="flex h-screen items-center justify-center bg-bg-primary">
       <div className="w-full max-w-sm rounded-lg bg-bg-secondary p-8 shadow-lg">
@@ -42,7 +36,6 @@ export function LoginPage(): React.ReactNode {
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            onKeyDown={handleKeyDown}
             placeholder="Enter your username"
             autoFocus
             autoComplete="username"
@@ -53,7 +46,6 @@ export function LoginPage(): React.ReactNode {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={handleKeyDown}
             placeholder="Enter your password"
             autoComplete="current-password"
           />

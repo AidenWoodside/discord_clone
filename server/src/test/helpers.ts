@@ -18,18 +18,18 @@ export async function seedOwner(app: FastifyInstance): Promise<{ id: string; tok
     password_hash: passwordHash,
     role: 'owner',
   }).returning().get();
-  const token = generateAccessToken({ userId: owner.id, role: 'owner' });
+  const token = generateAccessToken({ userId: owner.id, role: 'owner', username: 'owner' });
   return { id: owner.id, token };
 }
 
-export async function seedRegularUser(app: FastifyInstance): Promise<{ id: string; token: string }> {
+export async function seedRegularUser(app: FastifyInstance, username = 'regular'): Promise<{ id: string; token: string }> {
   const passwordHash = await hashPassword('userPass123');
   const user = app.db.insert(users).values({
-    username: 'regular',
+    username,
     password_hash: passwordHash,
     role: 'user',
   }).returning().get();
-  const token = generateAccessToken({ userId: user.id, role: 'user' });
+  const token = generateAccessToken({ userId: user.id, role: 'user', username });
   return { id: user.id, token };
 }
 
@@ -40,8 +40,8 @@ export async function seedUserWithSession(app: FastifyInstance, username = 'sess
     password_hash: passwordHash,
     role: 'user',
   }).returning().get();
-  const accessToken = generateAccessToken({ userId: user.id, role: 'user' });
-  const refreshToken = generateRefreshToken({ userId: user.id, role: 'user' });
+  const accessToken = generateAccessToken({ userId: user.id, role: 'user', username });
+  const refreshToken = generateRefreshToken({ userId: user.id, role: 'user', username });
   createSession(app.db, user.id, refreshToken);
   return { id: user.id, accessToken, refreshToken };
 }

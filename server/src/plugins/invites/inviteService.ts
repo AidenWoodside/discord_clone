@@ -17,11 +17,12 @@ export function createInvite(db: AppDatabase, createdBy: string): Invite {
     .get();
 }
 
-export function revokeInvite(db: AppDatabase, inviteId: string): void {
-  db.update(invites)
+export function revokeInvite(db: AppDatabase, inviteId: string): boolean {
+  const result = db.update(invites)
     .set({ revoked: true })
     .where(eq(invites.id, inviteId))
     .run();
+  return result.changes > 0;
 }
 
 export function validateInvite(

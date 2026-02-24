@@ -1,6 +1,6 @@
 # Story 1.3: User Registration & Invite System
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -452,6 +452,7 @@ Claude Opus 4.6
 ### Change Log
 
 - 2026-02-24: Implemented story 1-3 — User Registration & Invite System (all 10 tasks complete)
+- 2026-02-24: Code review fixed 10 issues (2 HIGH, 5 MEDIUM, 3 LOW): reordered login ban check before bcrypt, added Fastify schema validation to invite routes, added 404 for non-existent invite revocation, moved JWT_ACCESS_SECRET to module-level fail-fast, wrapped seed in transaction, extracted shared test helpers, standardized response patterns, added Fastify generics, added getAuthenticatedUser type guard, added jwt.verify runtime validation
 
 ### File List
 
@@ -466,9 +467,11 @@ New files:
 - server/src/plugins/invites/inviteRoutes.test.ts
 - server/src/db/seed.ts
 - server/src/db/seed.test.ts
+- server/src/test/helpers.ts (shared test utilities — extracted during code review)
 
 Modified files:
 - server/src/app.ts (registered auth middleware, auth routes, invite routes plugins)
+- server/src/app.test.ts (added vi.hoisted for JWT_ACCESS_SECRET module-level validation)
 - server/src/index.ts (added runSeed call after migrations)
 - server/package.json (added bcrypt, jsonwebtoken, @types/bcrypt, @types/jsonwebtoken)
 - .env.example (added OWNER_USERNAME, OWNER_PASSWORD, SERVER_NAME)

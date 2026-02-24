@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.stubEnv('JWT_ACCESS_SECRET', 'test-secret-key-for-testing');
+vi.hoisted(() => {
+  process.env.JWT_ACCESS_SECRET = 'test-secret-key-for-testing';
+});
 
 import { hashPassword, verifyPassword, generateAccessToken, verifyAccessToken } from './authService.js';
 

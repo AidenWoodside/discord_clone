@@ -21,17 +21,20 @@ export async function runSeed(db: AppDatabase, logger?: { info: (msg: string) =>
   }
 
   const passwordHash = await hashPassword(ownerPassword);
-  db.insert(users).values({
-    username: ownerUsername,
-    password_hash: passwordHash,
-    role: 'owner',
-  }).run();
-  log.info('Owner account created');
 
-  // Seed default channels
-  db.insert(channels).values([
-    { name: 'general', type: 'text' },
-    { name: 'Gaming', type: 'voice' },
-  ]).run();
+  db.transaction((tx) => {
+    tx.insert(users).values({
+      username: ownerUsername,
+      password_hash: passwordHash,
+      role: 'owner',
+    }).run();
+
+    tx.insert(channels).values([
+      { name: 'general', type: 'text' },
+      { name: 'Gaming', type: 'voice' },
+    ]).run();
+  });
+
+  log.info('Owner account created');
   log.info('Default channels seeded');
 }

@@ -1,7 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { type FastifyInstance } from 'fastify';
 
-// Set DATABASE_PATH to in-memory before importing app
+vi.hoisted(() => {
+  process.env.JWT_ACCESS_SECRET = 'test-secret-key-for-testing';
+});
 vi.stubEnv('DATABASE_PATH', ':memory:');
 
 import { buildApp } from './app.js';

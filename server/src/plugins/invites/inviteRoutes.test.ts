@@ -1,42 +1,13 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 
+vi.hoisted(() => {
+  process.env.JWT_ACCESS_SECRET = 'test-secret-key-for-testing';
+});
 vi.stubEnv('DATABASE_PATH', ':memory:');
-vi.stubEnv('JWT_ACCESS_SECRET', 'test-secret-key-for-testing');
 vi.stubEnv('SERVER_NAME', 'Test Server');
 
-import { buildApp } from '../../app.js';
-import { runMigrations } from '../../db/migrate.js';
-import { hashPassword, generateAccessToken } from '../auth/authService.js';
-import { users } from '../../db/schema.js';
-
-async function setupApp(): Promise<FastifyInstance> {
-  const app = await buildApp();
-  runMigrations(app.db);
-  return app;
-}
-
-async function seedOwner(app: FastifyInstance): Promise<{ id: string; token: string }> {
-  const passwordHash = await hashPassword('ownerPass123');
-  const owner = app.db.insert(users).values({
-    username: 'owner',
-    password_hash: passwordHash,
-    role: 'owner',
-  }).returning().get();
-  const token = generateAccessToken({ userId: owner.id, role: 'owner' });
-  return { id: owner.id, token };
-}
-
-async function seedRegularUser(app: FastifyInstance): Promise<{ id: string; token: string }> {
-  const passwordHash = await hashPassword('userPass123');
-  const user = app.db.insert(users).values({
-    username: 'regular',
-    password_hash: passwordHash,
-    role: 'user',
-  }).returning().get();
-  const token = generateAccessToken({ userId: user.id, role: 'user' });
-  return { id: user.id, token };
-}
+import { setupApp, seedOwner, seedRegularUser } from '../../test/helpers.js';
 
 describe('inviteRoutes', () => {
   let app: FastifyInstance;
@@ -112,6 +83,20 @@ describe('inviteRoutes', () => {
       });
 
       expect(response.statusCode).toBe(204);
+    });
+
+    it('should return 404 for non-existent invite', async () => {
+      app = await setupApp();
+      const { token: ownerToken } = await seedOwner(app);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/invites/non-existent-id',
+        headers: { authorization: `Bearer ${ownerToken}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.code).toBe('INVITE_NOT_FOUND');
     });
 
     it('should return 403 with non-owner token', async () => {

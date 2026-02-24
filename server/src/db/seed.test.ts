@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 
-vi.stubEnv('JWT_ACCESS_SECRET', 'test-secret-key-for-testing');
+vi.hoisted(() => {
+  process.env.JWT_ACCESS_SECRET = 'test-secret-key-for-testing';
+});
 
 import { createDatabase } from './connection.js';
 import { runMigrations } from './migrate.js';

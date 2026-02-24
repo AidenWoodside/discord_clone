@@ -47,6 +47,13 @@ export async function requireOwner(request: FastifyRequest, reply: FastifyReply)
   }
 }
 
+export function getAuthenticatedUser(request: FastifyRequest): { userId: string; role: string } {
+  if (!request.user) {
+    throw new Error('Authenticated user expected but not found');
+  }
+  return request.user;
+}
+
 declare module 'fastify' {
   interface FastifyRequest {
     user: { userId: string; role: string } | null;

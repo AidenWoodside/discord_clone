@@ -3,6 +3,11 @@ import jwt from 'jsonwebtoken';
 
 const BCRYPT_COST_FACTOR = 12;
 
+const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
+if (!JWT_ACCESS_SECRET) {
+  throw new Error('JWT_ACCESS_SECRET environment variable is required');
+}
+
 export interface JwtPayload {
   userId: string;
   role: string;
@@ -19,17 +24,13 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 export function generateAccessToken(payload: { userId: string; role: string }): string {
-  const secret = process.env.JWT_ACCESS_SECRET;
-  if (!secret) {
-    throw new Error('JWT_ACCESS_SECRET environment variable is required');
-  }
-  return jwt.sign(payload, secret, { expiresIn: '15m' });
+  return jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: '15m' });
 }
 
 export function verifyAccessToken(token: string): JwtPayload {
-  const secret = process.env.JWT_ACCESS_SECRET;
-  if (!secret) {
-    throw new Error('JWT_ACCESS_SECRET environment variable is required');
+  const decoded = jwt.verify(token, JWT_ACCESS_SECRET);
+  if (typeof decoded === 'string' || !decoded.userId || !decoded.role) {
+    throw new Error('Invalid token payload structure');
   }
-  return jwt.verify(token, secret) as JwtPayload;
+  return decoded as JwtPayload;
 }

@@ -1,39 +1,14 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
 
+vi.hoisted(() => {
+  process.env.JWT_ACCESS_SECRET = 'test-secret-key-for-testing';
+});
 vi.stubEnv('DATABASE_PATH', ':memory:');
-vi.stubEnv('JWT_ACCESS_SECRET', 'test-secret-key-for-testing');
 
-import { buildApp } from '../../app.js';
-import { runMigrations } from '../../db/migrate.js';
-import { hashPassword, generateAccessToken } from './authService.js';
-import { users, invites, bans } from '../../db/schema.js';
-
-async function setupApp(): Promise<FastifyInstance> {
-  const app = await buildApp();
-  runMigrations(app.db);
-  return app;
-}
-
-async function seedOwner(app: FastifyInstance): Promise<{ id: string; token: string }> {
-  const passwordHash = await hashPassword('ownerPass123');
-  const owner = app.db.insert(users).values({
-    username: 'owner',
-    password_hash: passwordHash,
-    role: 'owner',
-  }).returning().get();
-  const token = generateAccessToken({ userId: owner.id, role: 'owner' });
-  return { id: owner.id, token };
-}
-
-function seedInvite(app: FastifyInstance, createdBy: string, tokenValue = 'valid-invite-token'): string {
-  app.db.insert(invites).values({
-    token: tokenValue,
-    created_by: createdBy,
-  }).run();
-  return tokenValue;
-}
+import { setupApp, seedOwner, seedInvite } from '../../test/helpers.js';
+import { hashPassword } from './authService.js';
+import { users, bans } from '../../db/schema.js';
 
 describe('authRoutes', () => {
   let app: FastifyInstance;
@@ -87,6 +62,9 @@ describe('authRoutes', () => {
       app = await setupApp();
       const { id: ownerId } = await seedOwner(app);
       seedInvite(app, ownerId, 'revoked-token');
+
+      const { eq } = await import('drizzle-orm');
+      const { invites } = await import('../../db/schema.js');
       app.db.update(invites)
         .set({ revoked: true })
         .where(eq(invites.token, 'revoked-token'))

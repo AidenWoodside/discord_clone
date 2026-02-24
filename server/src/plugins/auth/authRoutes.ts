@@ -4,9 +4,20 @@ import type { FastifyInstance } from 'fastify';
 import { users, invites, bans } from '../../db/schema.js';
 import { hashPassword, verifyPassword, generateAccessToken } from './authService.js';
 
+interface RegisterBody {
+  username: string;
+  password: string;
+  inviteToken: string;
+}
+
+interface LoginBody {
+  username: string;
+  password: string;
+}
+
 export default fp(async (fastify: FastifyInstance) => {
   // POST /api/auth/register — PUBLIC
-  fastify.post('/api/auth/register', {
+  fastify.post<{ Body: RegisterBody }>('/api/auth/register', {
     schema: {
       body: {
         type: 'object',
@@ -20,11 +31,7 @@ export default fp(async (fastify: FastifyInstance) => {
       },
     },
   }, async (request, reply) => {
-    const { username, password, inviteToken } = request.body as {
-      username: string;
-      password: string;
-      inviteToken: string;
-    };
+    const { username, password, inviteToken } = request.body;
 
     // 1. Validate invite token
     const invite = fastify.db
@@ -100,7 +107,7 @@ export default fp(async (fastify: FastifyInstance) => {
   });
 
   // POST /api/auth/login — PUBLIC (minimal for this story)
-  fastify.post('/api/auth/login', {
+  fastify.post<{ Body: LoginBody }>('/api/auth/login', {
     schema: {
       body: {
         type: 'object',
@@ -113,10 +120,7 @@ export default fp(async (fastify: FastifyInstance) => {
       },
     },
   }, async (request, reply) => {
-    const { username, password } = request.body as {
-      username: string;
-      password: string;
-    };
+    const { username, password } = request.body;
 
     // 1. Look up user
     const user = fastify.db
@@ -131,15 +135,7 @@ export default fp(async (fastify: FastifyInstance) => {
       });
     }
 
-    // 2. Verify password
-    const validPassword = await verifyPassword(password, user.password_hash);
-    if (!validPassword) {
-      return reply.status(401).send({
-        error: { code: 'INVALID_CREDENTIALS', message: 'Invalid username or password' },
-      });
-    }
-
-    // 3. Check bans
+    // 2. Check bans (before expensive bcrypt)
     const ban = fastify.db
       .select()
       .from(bans)
@@ -149,6 +145,14 @@ export default fp(async (fastify: FastifyInstance) => {
     if (ban) {
       return reply.status(403).send({
         error: { code: 'ACCOUNT_BANNED', message: 'This account has been banned' },
+      });
+    }
+
+    // 3. Verify password
+    const validPassword = await verifyPassword(password, user.password_hash);
+    if (!validPassword) {
+      return reply.status(401).send({
+        error: { code: 'INVALID_CREDENTIALS', message: 'Invalid username or password' },
       });
     }
 

@@ -1,6 +1,8 @@
 import Fastify, { FastifyInstance } from 'fastify';
+import { sql } from 'drizzle-orm';
+import dbPlugin from './plugins/db.js';
 
-export function buildApp(): FastifyInstance {
+export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL || 'info',
@@ -11,7 +13,10 @@ export function buildApp(): FastifyInstance {
     },
   });
 
-  // --- Plugin Registration ---
+  // --- Infrastructure Plugins (register BEFORE domain plugins) ---
+  await app.register(dbPlugin);
+
+  // --- Domain Plugins ---
   // Domain plugins will be registered here:
   // app.register(authPlugin);
   // app.register(channelRoutes);
@@ -21,8 +26,15 @@ export function buildApp(): FastifyInstance {
   // app.register(inviteRoutes);
   // app.register(presencePlugin);
 
-  app.get('/api/health', async () => {
-    return { data: { status: 'ok' } };
+  app.get('/api/health', async (_request, reply) => {
+    try {
+      app.db.get(sql`SELECT 1 as result`);
+      return { data: { status: 'ok', database: 'connected' } };
+    } catch {
+      return reply.status(503).send({
+        error: { code: 'DATABASE_UNAVAILABLE', message: 'Database is unreachable' },
+      });
+    }
   });
 
   return app;

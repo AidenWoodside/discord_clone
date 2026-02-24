@@ -9,8 +9,8 @@ out/
 # Environment
 .env
 
-# Database
-data/sqlite
+# Database (SQLite DB file auto-created on first server start)
+data/
 
 # Logs
 *.log

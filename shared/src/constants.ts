@@ -1,0 +1,24 @@
+// Voice limits
+export const MAX_PARTICIPANTS = 25;
+
+// WebSocket
+export const WS_RECONNECT_DELAY = 1000;
+export const WS_MAX_RECONNECT_DELAY = 30000;
+export const WS_HEARTBEAT_INTERVAL = 30000;
+
+// JWT
+export const JWT_ACCESS_EXPIRY = '15m';
+export const JWT_REFRESH_EXPIRY = '7d';
+export const JWT_ACCESS_EXPIRY_MS = 15 * 60 * 1000;
+export const JWT_REFRESH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Messages
+export const MAX_MESSAGE_LENGTH = 2000;
+
+// Server
+export const MAX_CHANNELS_PER_SERVER = 50;
+export const MAX_MEMBERS_PER_SERVER = 100;
+
+// Rate limiting
+export const RATE_LIMIT_MESSAGES_PER_MINUTE = 30;
+export const RATE_LIMIT_API_PER_MINUTE = 60;

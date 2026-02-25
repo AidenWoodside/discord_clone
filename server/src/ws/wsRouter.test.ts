@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
-import { routeMessage, registerHandler, clearHandlers } from './wsRouter.js';
+import { routeMessage, registerHandler, clearHandlers, respond, respondError } from './wsRouter.js';
 
 function createMockSocket() {
   return {
@@ -97,6 +97,38 @@ describe('wsRouter', () => {
       routeMessage(ws, message, 'user-1', log);
 
       expect(ws.close).toHaveBeenCalledWith(4002, 'Malformed message');
+    });
+  });
+
+  describe('respond', () => {
+    it('sends a response with correct JSON format and id', () => {
+      respond(ws, 'req-1', { data: 'test' });
+
+      expect(ws.send).toHaveBeenCalledTimes(1);
+      const sent = JSON.parse(ws.send.mock.calls[0][0] as string);
+      expect(sent.type).toBe('response');
+      expect(sent.id).toBe('req-1');
+      expect(sent.payload).toEqual({ data: 'test' });
+    });
+
+    it('sends a response with empty payload', () => {
+      respond(ws, 'req-2', {});
+
+      const sent = JSON.parse(ws.send.mock.calls[0][0] as string);
+      expect(sent.type).toBe('response');
+      expect(sent.payload).toEqual({});
+    });
+  });
+
+  describe('respondError', () => {
+    it('sends an error with correct JSON format', () => {
+      respondError(ws, 'req-3', 'Something went wrong');
+
+      expect(ws.send).toHaveBeenCalledTimes(1);
+      const sent = JSON.parse(ws.send.mock.calls[0][0] as string);
+      expect(sent.type).toBe('error');
+      expect(sent.id).toBe('req-3');
+      expect(sent.payload.error).toBe('Something went wrong');
     });
   });
 });

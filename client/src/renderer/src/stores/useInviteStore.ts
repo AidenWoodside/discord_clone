@@ -33,6 +33,7 @@ export const useInviteStore = create<InviteState>((set) => ({
     try {
       const invite = await apiRequest<Invite>('/api/invites', {
         method: 'POST',
+        body: JSON.stringify({}),
       });
       set((state) => ({ invites: [invite, ...state.invites] }));
       return invite;

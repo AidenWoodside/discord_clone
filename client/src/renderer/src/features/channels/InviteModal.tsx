@@ -4,7 +4,7 @@ import { Modal, Button } from '../../components';
 import { useInviteStore } from '../../stores/useInviteStore';
 
 function buildInviteLink(token: string): string {
-  return `${window.location.origin}/invite/${token}`;
+  return `${window.location.origin}/#/register/${token}`;
 }
 
 interface InviteModalProps {

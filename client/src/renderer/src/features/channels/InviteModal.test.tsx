@@ -86,7 +86,7 @@ describe('InviteModal', () => {
     expect(mockGenerateInvite).toHaveBeenCalledOnce();
     await waitFor(() => {
       expect(clipSpy).toHaveBeenCalledWith(
-        expect.stringContaining('/invite/new-token'),
+        expect.stringContaining('/#/register/new-token'),
       );
     });
   });
@@ -104,7 +104,7 @@ describe('InviteModal', () => {
 
     await waitFor(() => {
       expect(clipSpy).toHaveBeenCalledWith(
-        expect.stringContaining('/invite/abc123'),
+        expect.stringContaining('/#/register/abc123'),
       );
     });
   });

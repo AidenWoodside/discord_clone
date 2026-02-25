@@ -1,7 +1,9 @@
-import type { WsMessage, PresenceUpdatePayload, PresenceSyncPayload, TextReceivePayload, ChannelCreatedPayload, ChannelDeletedPayload } from 'discord-clone-shared';
+import type { WsMessage, PresenceUpdatePayload, PresenceSyncPayload, TextReceivePayload, ChannelCreatedPayload, ChannelDeletedPayload, MemberRemovedPayload } from 'discord-clone-shared';
 import { WS_TYPES, WS_RECONNECT_DELAY, WS_MAX_RECONNECT_DELAY } from 'discord-clone-shared';
 import { usePresenceStore } from '../stores/usePresenceStore';
 import { useChannelStore } from '../stores/useChannelStore';
+import { useMemberStore } from '../stores/useMemberStore';
+import { useAdminNotificationStore } from '../stores/useAdminNotificationStore';
 
 type MessageCallback = (payload: unknown) => void;
 type PendingRequest = {
@@ -41,7 +43,7 @@ class WsClient {
       this.socket = null;
       this.markPendingMessagesFailed();
 
-      if (this.intentionalClose || event.code === 4001) {
+      if (this.intentionalClose || event.code === 4001 || event.code === 4003) {
         usePresenceStore.getState().setConnectionState('disconnected');
         return;
       }
@@ -223,6 +225,13 @@ class WsClient {
     } else if (message.type === WS_TYPES.CHANNEL_DELETED) {
       const payload = message.payload as ChannelDeletedPayload;
       useChannelStore.getState().removeChannel(payload.channelId);
+    } else if (message.type === WS_TYPES.USER_KICKED) {
+      useAdminNotificationStore.getState().showKicked();
+    } else if (message.type === WS_TYPES.USER_BANNED) {
+      useAdminNotificationStore.getState().showBanned();
+    } else if (message.type === WS_TYPES.MEMBER_REMOVED) {
+      const payload = message.payload as MemberRemovedPayload;
+      useMemberStore.getState().removeMember(payload.userId);
     }
 
     // Dispatch to registered handlers

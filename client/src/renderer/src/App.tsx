@@ -8,6 +8,8 @@ import { AppLayout } from './features/layout/AppLayout';
 import { ContentArea } from './features/layout/ContentArea';
 import { ChannelRedirect } from './features/layout/ChannelRedirect';
 import useAuthStore from './stores/useAuthStore';
+import { KickedNotification } from './features/admin/KickedNotification';
+import { BannedNotification } from './features/admin/BannedNotification';
 
 function App(): React.ReactNode {
   const restoreSession = useAuthStore((s) => s.restoreSession);
@@ -18,6 +20,8 @@ function App(): React.ReactNode {
 
   return (
     <RadixTooltip.Provider>
+      <KickedNotification />
+      <BannedNotification />
       <HashRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

@@ -55,4 +55,22 @@ describe('useMemberStore', () => {
     useMemberStore.getState().clearError();
     expect(useMemberStore.getState().error).toBeNull();
   });
+
+  it('should remove member by userId', () => {
+    useMemberStore.setState({
+      members: [
+        { id: '1', username: 'owner', role: 'owner', createdAt: '2024-01-01' },
+        { id: '2', username: 'user1', role: 'user', createdAt: '2024-01-02' },
+        { id: '3', username: 'user2', role: 'user', createdAt: '2024-01-03' },
+      ],
+    });
+
+    useMemberStore.getState().removeMember('2');
+
+    const state = useMemberStore.getState();
+    expect(state.members.length).toBe(2);
+    expect(state.members.find(m => m.id === '2')).toBeUndefined();
+    expect(state.members.find(m => m.id === '1')).toBeDefined();
+    expect(state.members.find(m => m.id === '3')).toBeDefined();
+  });
 });

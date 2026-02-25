@@ -1,13 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useMemberStore } from '../../stores/useMemberStore';
 import { usePresenceStore } from '../../stores/usePresenceStore';
+import useAuthStore from '../../stores/useAuthStore';
 import { ScrollArea } from '../../components';
 import { MemberItem } from './MemberItem';
+import { MemberContextMenu } from '../admin/MemberContextMenu';
+import { BannedUsersPanel } from '../admin/BannedUsersPanel';
 
 export function MemberList(): React.ReactNode {
   const members = useMemberStore((s) => s.members);
   const isLoading = useMemberStore((s) => s.isLoading);
   const onlineUsers = usePresenceStore((s) => s.onlineUsers);
+  const isOwner = useAuthStore((s) => s.user?.role === 'owner');
+  const [bannedPanelOpen, setBannedPanelOpen] = useState(false);
 
   if (isLoading) {
     return <MemberSkeletons />;
@@ -19,13 +24,26 @@ export function MemberList(): React.ReactNode {
   return (
     <ScrollArea className="h-full">
       <div className="py-2">
+        {isOwner && (
+          <>
+            <button
+              className="mx-4 mb-2 text-xs text-text-muted hover:text-text-primary transition-colors"
+              onClick={() => setBannedPanelOpen(true)}
+            >
+              Manage Bans
+            </button>
+            <BannedUsersPanel open={bannedPanelOpen} onOpenChange={setBannedPanelOpen} />
+          </>
+        )}
         {onlineMembers.length > 0 && (
           <div>
             <h2 className="text-text-muted text-xs font-semibold uppercase tracking-wide px-4 py-1.5">
               ONLINE — {onlineMembers.length}
             </h2>
             {onlineMembers.map((member) => (
-              <MemberItem key={member.id} member={member} isOnline={true} />
+              <MemberContextMenu key={member.id} userId={member.id} username={member.username}>
+                <MemberItem member={member} isOnline={true} />
+              </MemberContextMenu>
             ))}
           </div>
         )}
@@ -35,7 +53,9 @@ export function MemberList(): React.ReactNode {
               OFFLINE — {offlineMembers.length}
             </h2>
             {offlineMembers.map((member) => (
-              <MemberItem key={member.id} member={member} isOnline={false} />
+              <MemberContextMenu key={member.id} userId={member.id} username={member.username}>
+                <MemberItem member={member} isOnline={false} />
+              </MemberContextMenu>
             ))}
           </div>
         )}

@@ -1,6 +1,6 @@
 # Story 5.2: User Management & Administration
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -28,14 +28,14 @@ So that I can maintain the server and help friends who get locked out.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create server-side admin plugin with kick/ban/unban/reset-password routes (AC: 2, 3, 4, 5, 6)
-  - [ ] 1.1 Create `server/src/plugins/admin/adminService.ts`:
+- [x] Task 1: Create server-side admin plugin with kick/ban/unban/reset-password routes (AC: 2, 3, 4, 5, 6)
+  - [x] 1.1 Create `server/src/plugins/admin/adminService.ts`:
     - `kickUser(db, userId)` — deletes all sessions for the user via `deleteUserSessions()` (already exists in `sessionService.ts`), removes user from presence (if online). Does NOT delete the user record — they can rejoin. Returns the kicked user's info
     - `banUser(db, userId, bannedBy)` — inserts into `bans` table, deletes all sessions, removes from presence. The ban check already exists in `authService` login/register flows
     - `unbanUser(db, userId)` — deletes the ban record from `bans` table
     - `resetPassword(db, userId)` — generates a random temporary password (crypto.randomBytes(16).toString('base64url')), hashes it with bcrypt (cost 12 — use existing `hashPassword()`), updates the user's `password_hash`, deletes all sessions. Returns the plaintext temporary password
     - `getBannedUsers(db)` — queries `bans` table joined with `users` to return `{ id, userId, username, bannedBy, createdAt }[]`
-  - [ ] 1.2 Create `server/src/plugins/admin/adminRoutes.ts` as a Fastify plugin:
+  - [x] 1.2 Create `server/src/plugins/admin/adminRoutes.ts` as a Fastify plugin:
     - Prefix: `/api/admin`
     - All routes use `requireOwner()` pre-handler (from `authMiddleware.ts`)
     - `POST /api/admin/kick/:userId` — kicks user, broadcasts `user:kicked` WS message, returns `204`
@@ -45,77 +45,77 @@ So that I can maintain the server and help friends who get locked out.
     - `GET /api/admin/bans` — returns `200 { data: BannedUser[], count: number }`
     - Add Fastify JSON schema validation for all route params
     - Prevent owner from kicking/banning/resetting themselves (return `400 { error: { code: "INVALID_ACTION", message: "Cannot perform this action on yourself" } }`)
-  - [ ] 1.3 Register admin plugin in `server/src/app.ts` — add `fastify.register(adminRoutes, { prefix: '/api/admin' })` after user routes
+  - [x] 1.3 Register admin plugin in `server/src/app.ts` — add `fastify.register(adminRoutes, { prefix: '/api/admin' })` after user routes
 
-- [ ] Task 2: Add WebSocket notifications for admin actions (AC: 3, 4)
-  - [ ] 2.1 In `shared/src/ws-messages.ts`: add `UserKickedPayload { userId: string, reason?: string }` and `UserBannedPayload { userId: string }`
-  - [ ] 2.2 In `shared/src/ws-messages.ts`: add `WS_TYPES.USER_KICKED = 'user:kicked'` and `WS_TYPES.USER_BANNED = 'user:banned'` to the existing WS_TYPES object
-  - [ ] 2.3 In `shared/src/index.ts`: export the new payload types
-  - [ ] 2.4 After kick/ban in admin routes: send `user:kicked` or `user:banned` directly to the targeted user's WebSocket connection (NOT broadcast to all — only the affected user needs notification), then close their WS connection
-  - [ ] 2.5 After kick/ban: broadcast `presence:update { userId, status: 'offline' }` to all remaining clients so they see the user go offline
-  - [ ] 2.6 After kick/ban: broadcast `member:removed { userId }` to all remaining clients so they remove the user from their member list
+- [x] Task 2: Add WebSocket notifications for admin actions (AC: 3, 4)
+  - [x] 2.1 In `shared/src/ws-messages.ts`: add `UserKickedPayload { userId: string, reason?: string }` and `UserBannedPayload { userId: string }`
+  - [x] 2.2 In `shared/src/ws-messages.ts`: add `WS_TYPES.USER_KICKED = 'user:kicked'` and `WS_TYPES.USER_BANNED = 'user:banned'` to the existing WS_TYPES object
+  - [x] 2.3 In `shared/src/index.ts`: export the new payload types
+  - [x] 2.4 After kick/ban in admin routes: send `user:kicked` or `user:banned` directly to the targeted user's WebSocket connection (NOT broadcast to all — only the affected user needs notification), then close their WS connection
+  - [x] 2.5 After kick/ban: broadcast `presence:update { userId, status: 'offline' }` to all remaining clients so they see the user go offline
+  - [x] 2.6 After kick/ban: broadcast `member:removed { userId }` to all remaining clients so they remove the user from their member list
 
-- [ ] Task 3: Add client-side WebSocket handlers for admin events (AC: 3, 4)
-  - [ ] 3.1 In `client/src/renderer/src/services/wsClient.ts`: register handler for `user:kicked` → show a dialog informing the user they've been kicked, then call `useAuthStore.getState().logout()` to clear tokens and redirect to login
-  - [ ] 3.2 In `client/src/renderer/src/services/wsClient.ts`: register handler for `user:banned` → show a dialog informing the user they've been banned, then call `useAuthStore.getState().logout()` to clear tokens and redirect to login
-  - [ ] 3.3 In `client/src/renderer/src/services/wsClient.ts`: register handler for `member:removed` → calls `useMemberStore.getState().removeMember(payload.userId)` to remove from member list
-  - [ ] 3.4 In `client/src/renderer/src/stores/useMemberStore.ts`: add `removeMember(userId: string)` action — removes user from `members` array
+- [x] Task 3: Add client-side WebSocket handlers for admin events (AC: 3, 4)
+  - [x] 3.1 In `client/src/renderer/src/services/wsClient.ts`: register handler for `user:kicked` → show a dialog informing the user they've been kicked, then call `useAuthStore.getState().logout()` to clear tokens and redirect to login
+  - [x] 3.2 In `client/src/renderer/src/services/wsClient.ts`: register handler for `user:banned` → show a dialog informing the user they've been banned, then call `useAuthStore.getState().logout()` to clear tokens and redirect to login
+  - [x] 3.3 In `client/src/renderer/src/services/wsClient.ts`: register handler for `member:removed` → calls `useMemberStore.getState().removeMember(payload.userId)` to remove from member list
+  - [x] 3.4 In `client/src/renderer/src/stores/useMemberStore.ts`: add `removeMember(userId: string)` action — removes user from `members` array
 
-- [ ] Task 4: Add context menu to MemberItem for admin actions (AC: 2, 7)
-  - [ ] 4.1 Create `client/src/renderer/src/features/admin/MemberContextMenu.tsx` — Radix `ContextMenu` wrapper. Only renders for owner role (from `useAuthStore`). Never renders when targeting self (the owner). Regular users: right-click does nothing (no menu rendered)
-  - [ ] 4.2 Context menu items:
+- [x] Task 4: Add context menu to MemberItem for admin actions (AC: 2, 7)
+  - [x] 4.1 Create `client/src/renderer/src/features/admin/MemberContextMenu.tsx` — Radix `ContextMenu` wrapper. Only renders for owner role (from `useAuthStore`). Never renders when targeting self (the owner). Regular users: right-click does nothing (no menu rendered)
+  - [x] 4.2 Context menu items:
     - "Kick" with a person-remove icon
     - "Ban" with a ban/block icon, styled in `error` color (#f23f43), preceded by Radix `Separator`
     - "Reset Password" with a key/lock icon
-  - [ ] 4.3 Menu styling: `bg-floating` (#161310) background, 8px border radius, 6px padding, min-width 180px
-  - [ ] 4.4 Wrap each `MemberItem` in `MemberList.tsx` with `MemberContextMenu` — pass `userId` and `username` as props
-  - [ ] 4.5 "Kick" opens `KickConfirmDialog`, "Ban" opens `BanConfirmDialog`, "Reset Password" opens `ResetPasswordDialog`
+  - [x] 4.3 Menu styling: `bg-floating` (#161310) background, 8px border radius, 6px padding, min-width 180px
+  - [x] 4.4 Wrap each `MemberItem` in `MemberList.tsx` with `MemberContextMenu` — pass `userId` and `username` as props
+  - [x] 4.5 "Kick" opens `KickConfirmDialog`, "Ban" opens `BanConfirmDialog`, "Reset Password" opens `ResetPasswordDialog`
 
-- [ ] Task 5: Create confirmation dialogs for destructive admin actions (AC: 3, 4, 6)
-  - [ ] 5.1 Create `client/src/renderer/src/features/admin/KickConfirmDialog.tsx` — Radix Dialog:
+- [x] Task 5: Create confirmation dialogs for destructive admin actions (AC: 3, 4, 6)
+  - [x] 5.1 Create `client/src/renderer/src/features/admin/KickConfirmDialog.tsx` — Radix Dialog:
     - Title: "Kick {username}?"
     - Description: "They will be removed from the server but can rejoin with a new invite."
     - Buttons: "Cancel" (secondary) + "Kick" (danger `error` fill)
     - On confirm: call `POST /api/admin/kick/:userId` via apiClient, show loading on button, close on success
     - NOT a destructive action that needs warning about data loss — kick is reversible
-  - [ ] 5.2 Create `client/src/renderer/src/features/admin/BanConfirmDialog.tsx` — Radix Dialog:
+  - [x] 5.2 Create `client/src/renderer/src/features/admin/BanConfirmDialog.tsx` — Radix Dialog:
     - Title: "Ban {username}?"
     - Description: "They will be permanently removed and cannot log in or create new accounts."
     - Buttons: "Cancel" (secondary) + "Ban" (danger `error` fill)
     - On confirm: call `POST /api/admin/ban/:userId` via apiClient, show loading on button, close on success
-  - [ ] 5.3 Create `client/src/renderer/src/features/admin/ResetPasswordDialog.tsx` — Radix Dialog:
+  - [x] 5.3 Create `client/src/renderer/src/features/admin/ResetPasswordDialog.tsx` — Radix Dialog:
     - Title: "Reset Password for {username}"
     - On trigger: calls `POST /api/admin/reset-password/:userId` immediately (no confirmation per UX spec — non-destructive)
     - Shows generated temporary password with a "Copy" button
     - Description: "Share this temporary password with {username} directly. Their current sessions have been invalidated."
     - Buttons: "Copy Password" (primary) + "Done" (secondary)
     - Copies temporary password to clipboard via `navigator.clipboard.writeText()`
-  - [ ] 5.4 Dialog styling: `bg-floating` background, max-width 440px, 16px padding, 8px border radius, semi-transparent dark overlay
+  - [x] 5.4 Dialog styling: `bg-floating` background, max-width 440px, 16px padding, 8px border radius, semi-transparent dark overlay
 
-- [ ] Task 6: Add admin panel for banned users management (AC: 5)
-  - [ ] 6.1 Create `client/src/renderer/src/features/admin/BannedUsersPanel.tsx`:
+- [x] Task 6: Add admin panel for banned users management (AC: 5)
+  - [x] 6.1 Create `client/src/renderer/src/features/admin/BannedUsersPanel.tsx`:
     - Accessible from server settings dropdown ("Manage Bans" or "Banned Users")
     - Fetches banned users from `GET /api/admin/bans`
     - Displays list of banned users with username and ban date
     - Each entry has an "Unban" button
     - On unban: calls `POST /api/admin/unban/:userId`, removes from list on success
     - Empty state: "No banned users" message
-  - [ ] 6.2 Add "Banned Users" option to the server settings dropdown (from Story 5-1's `ServerHeader.tsx`) — only visible to owner
+  - [x] 6.2 Add "Banned Users" option to the server settings dropdown (from Story 5-1's `ServerHeader.tsx`) — only visible to owner
 
-- [ ] Task 7: Add kicked/banned notification dialog for affected users (AC: 3, 4)
-  - [ ] 7.1 Create `client/src/renderer/src/features/admin/KickedNotification.tsx` — Modal that appears when user receives `user:kicked` WS message:
+- [x] Task 7: Add kicked/banned notification dialog for affected users (AC: 3, 4)
+  - [x] 7.1 Create `client/src/renderer/src/features/admin/KickedNotification.tsx` — Modal that appears when user receives `user:kicked` WS message:
     - Title: "You've been kicked"
     - Description: "The server owner has removed you from the server. You can rejoin with a new invite link."
     - Button: "OK" — triggers logout and redirect to login page
     - Cannot be dismissed by clicking outside or pressing Escape — must click OK
-  - [ ] 7.2 Create `client/src/renderer/src/features/admin/BannedNotification.tsx` — Modal that appears when user receives `user:banned` WS message:
+  - [x] 7.2 Create `client/src/renderer/src/features/admin/BannedNotification.tsx` — Modal that appears when user receives `user:banned` WS message:
     - Title: "You've been banned"
     - Description: "The server owner has banned your account. You cannot log in or create new accounts."
     - Button: "OK" — triggers logout and redirect to login page
     - Cannot be dismissed by clicking outside or pressing Escape — must click OK
 
-- [ ] Task 8: Write server-side tests (AC: 1-7)
-  - [ ] 8.1 Create `server/src/plugins/admin/adminService.test.ts`:
+- [x] Task 8: Write server-side tests (AC: 1-7)
+  - [x] 8.1 Create `server/src/plugins/admin/adminService.test.ts`:
     - Test kickUser: verifies sessions deleted, returns user info
     - Test kickUser: throws 404 for non-existent user
     - Test banUser: verifies ban record created, sessions deleted
@@ -124,7 +124,7 @@ So that I can maintain the server and help friends who get locked out.
     - Test unbanUser: throws 404 for non-existent ban
     - Test resetPassword: verifies password hash changed, sessions deleted, returns temp password
     - Test getBannedUsers: returns all banned users with usernames
-  - [ ] 8.2 Create `server/src/plugins/admin/adminRoutes.test.ts`:
+  - [x] 8.2 Create `server/src/plugins/admin/adminRoutes.test.ts`:
     - Test POST /api/admin/kick/:userId with owner token → 204
     - Test POST /api/admin/kick/:userId with non-owner token → 403
     - Test POST /api/admin/kick/:ownUserId (self-kick) → 400
@@ -142,37 +142,37 @@ So that I can maintain the server and help friends who get locked out.
     - Test ban then login → 401 (verifies existing ban check in auth works)
     - Test ban then register → 403 (verifies existing ban check in auth works)
 
-- [ ] Task 9: Write client-side tests (AC: 1-7)
-  - [ ] 9.1 Create `client/src/renderer/src/features/admin/MemberContextMenu.test.tsx`:
+- [x] Task 9: Write client-side tests (AC: 1-7)
+  - [x] 9.1 Create `client/src/renderer/src/features/admin/MemberContextMenu.test.tsx`:
     - Test: context menu renders for owner role only
     - Test: no context menu for regular user
     - Test: no context menu when right-clicking self
     - Test: "Kick", "Ban", "Reset Password" items visible
     - Test: clicking each item opens correct dialog
-  - [ ] 9.2 Create `client/src/renderer/src/features/admin/KickConfirmDialog.test.tsx`:
+  - [x] 9.2 Create `client/src/renderer/src/features/admin/KickConfirmDialog.test.tsx`:
     - Test: renders with username in title
     - Test: cancel closes dialog
     - Test: confirm calls kick API
     - Test: shows loading state during API call
-  - [ ] 9.3 Create `client/src/renderer/src/features/admin/BanConfirmDialog.test.tsx`:
+  - [x] 9.3 Create `client/src/renderer/src/features/admin/BanConfirmDialog.test.tsx`:
     - Test: renders with username in title and warning
     - Test: cancel closes dialog
     - Test: confirm calls ban API
-  - [ ] 9.4 Create `client/src/renderer/src/features/admin/ResetPasswordDialog.test.tsx`:
+  - [x] 9.4 Create `client/src/renderer/src/features/admin/ResetPasswordDialog.test.tsx`:
     - Test: calls API on open and displays temp password
     - Test: copy button copies to clipboard
     - Test: done closes dialog
-  - [ ] 9.5 Create `client/src/renderer/src/features/admin/BannedUsersPanel.test.tsx`:
+  - [x] 9.5 Create `client/src/renderer/src/features/admin/BannedUsersPanel.test.tsx`:
     - Test: fetches and displays banned users
     - Test: unban button calls API and removes from list
     - Test: empty state message when no bans
-  - [ ] 9.6 Update `client/src/renderer/src/stores/useMemberStore.test.ts`:
+  - [x] 9.6 Update `client/src/renderer/src/stores/useMemberStore.test.ts`:
     - Test: removeMember removes user from list
 
-- [ ] Task 10: Final verification (AC: 1-7)
-  - [ ] 10.1 Run `npm test -w server` — all existing + new tests pass
-  - [ ] 10.2 Run `npm test -w client` — all existing + new tests pass
-  - [ ] 10.3 Run `npm run lint` — no lint errors across all workspaces
+- [x] Task 10: Final verification (AC: 1-7)
+  - [x] 10.1 Run `npm test -w server` — all existing + new tests pass (157 passed, 0 failed)
+  - [x] 10.2 Run `npm test -w client` — all existing + new tests pass (111 passed, 0 failed)
+  - [x] 10.3 Run `npm run lint` — no lint errors across all workspaces
   - [ ] 10.4 Manual test: log in as owner, right-click member → context menu appears with Kick/Ban/Reset Password
   - [ ] 10.5 Manual test: kick a user → user is disconnected and sees notification
   - [ ] 10.6 Manual test: kicked user can rejoin via invite
@@ -531,10 +531,59 @@ The wsServer.ts module was built in story 2-1 and provides the client tracking i
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.6
 
 ### Debug Log References
 
+- Fixed `fp()` wrapping on adminRoutes causing route registration failure with prefix. Removed `fp()` to match channelRoutes pattern — routes registered correctly without encapsulation breaking.
+
 ### Completion Notes List
 
+- Task 1: Created adminService.ts with kickUser, banUser, unbanUser, resetPassword, getBannedUsers. Created adminRoutes.ts (without fp() wrapper) with all 5 routes + requireOwner preHandler. Registered in app.ts.
+- Task 2: Added UserKickedPayload, UserBannedPayload, MemberRemovedPayload to shared/ws-messages.ts. Added WS_TYPES.USER_KICKED, USER_BANNED, MEMBER_REMOVED. Exported from shared/index.ts. WS notifications sent in admin routes — targeted to affected user only, then broadcast presence:offline + member:removed.
+- Task 3: Registered user:kicked/user:banned/member:removed handlers in wsClient.ts. Created useAdminNotificationStore for kicked/banned notification state. Added removeMember to useMemberStore.
+- Task 4: Created MemberContextMenu.tsx wrapping MemberItem in MemberList.tsx. Owner-only, never renders for self. Radix ContextMenu with Kick/Ban/Reset Password items.
+- Task 5: Created KickConfirmDialog, BanConfirmDialog (confirmation + API call + loading state), ResetPasswordDialog (auto-calls API on open, shows temp password + copy button).
+- Task 6: Created BannedUsersPanel.tsx with fetch/display/unban flow. Note: ServerHeader.tsx does not exist yet (Story 5-1 is backlog) — the "Banned Users" dropdown item integration is deferred until Story 5-1 is implemented.
+- Task 7: Created KickedNotification.tsx and BannedNotification.tsx — non-dismissible modals that trigger logout on OK. Mounted in App.tsx.
+- Task 8: 26 server tests (10 service + 16 routes) — all pass.
+- Task 9: 24 client tests (6 MemberContextMenu + 4 KickConfirmDialog + 3 BanConfirmDialog + 3 ResetPasswordDialog + 3 BannedUsersPanel + 5 useMemberStore) — all pass.
+- Task 10: 157 server tests pass, 111 client tests pass, 0 lint errors. Manual tests deferred.
+
+### Change Log
+
+- 2026-02-24: Implemented Story 5-2 — User Management & Administration (kick, ban, unban, reset password, context menu, dialogs, WS notifications)
+- 2026-02-24: Code review — Fixed 10 issues (4 HIGH, 3 MEDIUM, 3 LOW): WS reconnect after kick/ban, double presence broadcast, missing tests, BannedUsersPanel entry point, dismiss/logout order, existing ban check, error feedback in dialogs, custom error classes, getClientByUserId helper, broadcastMemberRemoved refactor. Server: 162 tests pass (+5 new). Client: 111 tests pass. 0 lint errors.
+
 ### File List
+
+**New files:**
+- server/src/plugins/admin/adminService.ts
+- server/src/plugins/admin/adminRoutes.ts
+- server/src/plugins/admin/adminService.test.ts
+- server/src/plugins/admin/adminRoutes.test.ts
+- client/src/renderer/src/features/admin/MemberContextMenu.tsx
+- client/src/renderer/src/features/admin/MemberContextMenu.test.tsx
+- client/src/renderer/src/features/admin/KickConfirmDialog.tsx
+- client/src/renderer/src/features/admin/KickConfirmDialog.test.tsx
+- client/src/renderer/src/features/admin/BanConfirmDialog.tsx
+- client/src/renderer/src/features/admin/BanConfirmDialog.test.tsx
+- client/src/renderer/src/features/admin/ResetPasswordDialog.tsx
+- client/src/renderer/src/features/admin/ResetPasswordDialog.test.tsx
+- client/src/renderer/src/features/admin/BannedUsersPanel.tsx
+- client/src/renderer/src/features/admin/BannedUsersPanel.test.tsx
+- client/src/renderer/src/features/admin/KickedNotification.tsx
+- client/src/renderer/src/features/admin/BannedNotification.tsx
+- client/src/renderer/src/stores/useAdminNotificationStore.ts
+
+**Modified files:**
+- server/src/app.ts — registered adminRoutes plugin
+- server/src/ws/wsServer.ts — added getClientByUserId/removeClientByUserId helpers, guarded close handler against double broadcast
+- server/src/plugins/presence/presenceService.ts — added broadcastMemberRemoved function
+- shared/src/ws-messages.ts — added UserKickedPayload, UserBannedPayload, MemberRemovedPayload, WS_TYPES entries
+- shared/src/index.ts — exported new payload types
+- client/src/renderer/src/App.tsx — mounted KickedNotification + BannedNotification
+- client/src/renderer/src/features/members/MemberList.tsx — wrapped MemberItem with MemberContextMenu, added BannedUsersPanel entry point (owner-only)
+- client/src/renderer/src/stores/useMemberStore.ts — added removeMember action
+- client/src/renderer/src/stores/useMemberStore.test.ts — added removeMember test
+- client/src/renderer/src/services/wsClient.ts — added user:kicked, user:banned, member:removed handlers, added 4003 close code to no-reconnect list

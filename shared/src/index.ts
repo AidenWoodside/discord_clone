@@ -37,6 +37,9 @@ export type {
   PresenceSyncPayload,
   ChannelCreatedPayload,
   ChannelDeletedPayload,
+  UserKickedPayload,
+  UserBannedPayload,
+  MemberRemovedPayload,
 } from './ws-messages.js';
 
 export { WS_TYPES } from './ws-messages.js';

@@ -131,6 +131,19 @@ export interface ChannelDeletedPayload {
   channelId: string;
 }
 
+// Admin action payloads
+export interface UserKickedPayload {
+  userId: string;
+}
+
+export interface UserBannedPayload {
+  userId: string;
+}
+
+export interface MemberRemovedPayload {
+  userId: string;
+}
+
 // Type constants for namespace:action pattern
 export const WS_TYPES = {
   TEXT_SEND: 'text:send',
@@ -155,4 +168,7 @@ export const WS_TYPES = {
   CHANNEL_CREATED: 'channel:created',
   CHANNEL_DELETED: 'channel:deleted',
   USER_UPDATE: 'user:update',
+  USER_KICKED: 'user:kicked',
+  USER_BANNED: 'user:banned',
+  MEMBER_REMOVED: 'member:removed',
 } as const;

@@ -3,7 +3,16 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import useMessageStore from '../../stores/useMessageStore';
 import { usePresenceStore } from '../../stores/usePresenceStore';
-import MessageInput from './MessageInput';
+
+const { mockSendMessage } = vi.hoisted(() => ({
+  mockSendMessage: vi.fn(),
+}));
+
+// Mock messageService
+vi.mock('../../services/messageService', () => ({
+  sendMessage: mockSendMessage,
+  fetchMessages: vi.fn(),
+}));
 
 // Mock encryptionService
 vi.mock('../../services/encryptionService', () => ({
@@ -32,6 +41,8 @@ vi.mock('../../stores/useAuthStore', () => ({
   },
 }));
 
+import MessageInput from './MessageInput';
+
 beforeAll(() => {
   window.api = {
     secureStorage: {
@@ -57,6 +68,7 @@ beforeEach(() => {
     isLoading: false,
     error: null,
   });
+  vi.clearAllMocks();
 });
 
 describe('MessageInput', () => {
@@ -76,10 +88,8 @@ describe('MessageInput', () => {
     // Input should be cleared
     expect(textarea).toHaveValue('');
 
-    // Message should be in store (optimistic)
-    const messages = useMessageStore.getState().messages.get('ch-1');
-    expect(messages).toBeDefined();
-    expect(messages!.length).toBeGreaterThanOrEqual(1);
+    // sendMessage service should have been called
+    expect(mockSendMessage).toHaveBeenCalledWith('ch-1', 'Hello world');
   });
 
   it('inserts newline on Shift+Enter instead of sending', async () => {
@@ -101,8 +111,7 @@ describe('MessageInput', () => {
     screen.getByPlaceholderText('Message #general');
     await user.keyboard('{Enter}');
 
-    const messages = useMessageStore.getState().messages.get('ch-1');
-    expect(messages).toBeUndefined();
+    expect(mockSendMessage).not.toHaveBeenCalled();
   });
 
   it('is disabled when WebSocket is disconnected', () => {

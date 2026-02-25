@@ -100,25 +100,52 @@ class WsClient {
           }
         }
       }
-    }).catch(() => {});
+    }).catch((err) => {
+      console.warn('[wsClient] Failed to mark pending messages as failed:', err);
+    });
   }
 
   private async handleTextReceive(message: WsMessage<TextReceivePayload>): Promise<void> {
     const payload = message.payload;
-    try {
-      const useAuthStore = (await import('../stores/useAuthStore')).default;
-      const useMessageStore = (await import('../stores/useMessageStore')).default;
-      const currentUserId = useAuthStore.getState().user?.id;
 
-      if (payload.authorId === currentUserId && message.id) {
-        // Sender confirmation — match by tempId
-        useMessageStore.getState().confirmMessage(message.id, payload);
-      } else {
-        // Message from another user
-        useMessageStore.getState().addReceivedMessage(payload);
+    let useAuthStore: typeof import('../stores/useAuthStore').default;
+    let useMessageStore: typeof import('../stores/useMessageStore').default;
+    let decryptMessage: typeof import('./encryptionService').decryptMessage;
+
+    try {
+      useAuthStore = (await import('../stores/useAuthStore')).default;
+      useMessageStore = (await import('../stores/useMessageStore')).default;
+      decryptMessage = (await import('./encryptionService')).decryptMessage;
+    } catch (err) {
+      console.warn('[wsClient] Failed to import modules for text:receive handling:', err);
+      return;
+    }
+
+    const currentUserId = useAuthStore.getState().user?.id;
+
+    if (payload.authorId === currentUserId && message.id) {
+      // Sender confirmation — match by tempId
+      useMessageStore.getState().confirmMessage(message.id, payload);
+    } else {
+      // Message from another user — decrypt and add to store
+      const groupKey = useAuthStore.getState().groupKey;
+      if (!groupKey) return;
+
+      let plaintext: string;
+      try {
+        plaintext = decryptMessage(payload.content, payload.nonce, groupKey);
+      } catch {
+        plaintext = '[Decryption failed]';
       }
-    } catch {
-      // Module import failed — ignore
+
+      useMessageStore.getState().addReceivedMessage({
+        id: payload.messageId,
+        channelId: payload.channelId,
+        authorId: payload.authorId,
+        content: plaintext,
+        createdAt: payload.createdAt,
+        status: 'sent',
+      });
     }
   }
 

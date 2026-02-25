@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyBaseLogger } from 'fastify';
 
 vi.hoisted(() => {
   process.env.JWT_ACCESS_SECRET = 'test-secret-key-for-testing';
@@ -23,11 +23,26 @@ function createMockSocket(readyState = 1) {
   } as unknown as import('ws').WebSocket;
 }
 
+function createMockLogger() {
+  return {
+    warn: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn(),
+    child: vi.fn(),
+    silent: vi.fn(),
+    level: 'info',
+  } as unknown as FastifyBaseLogger;
+}
+
 describe('messageWsHandler', () => {
   let app: FastifyInstance;
   let channelId: string;
   let userId: string;
   let clients: Map<string, import('ws').WebSocket>;
+  let mockLog: FastifyBaseLogger;
 
   beforeEach(async () => {
     clearHandlers();
@@ -38,7 +53,8 @@ describe('messageWsHandler', () => {
     userId = user.id;
 
     clients = new Map();
-    registerMessageHandlers(clients, app.db);
+    mockLog = createMockLogger();
+    registerMessageHandlers(clients, app.db, mockLog);
   });
 
   it('stores message and broadcasts text:receive on valid text:send', () => {
@@ -53,7 +69,7 @@ describe('messageWsHandler', () => {
       id: 'temp-123',
     });
 
-    routeMessage(senderWs, raw, userId, { warn: vi.fn(), info: vi.fn(), error: vi.fn() } as unknown as import('fastify').FastifyBaseLogger);
+    routeMessage(senderWs, raw, userId, mockLog);
 
     // Message stored in DB
     const stored = app.db.select().from(messages).where(eq(messages.channel_id, channelId)).all();
@@ -89,7 +105,7 @@ describe('messageWsHandler', () => {
       payload: { content: 'blob', nonce: 'nonce' },
     });
 
-    routeMessage(ws, raw, userId, { warn: vi.fn(), info: vi.fn(), error: vi.fn() } as unknown as import('fastify').FastifyBaseLogger);
+    routeMessage(ws, raw, userId, mockLog);
     expect(ws.close).toHaveBeenCalledWith(4002, 'Missing or invalid channelId');
   });
 
@@ -102,7 +118,7 @@ describe('messageWsHandler', () => {
       payload: { channelId, nonce: 'nonce' },
     });
 
-    routeMessage(ws, raw, userId, { warn: vi.fn(), info: vi.fn(), error: vi.fn() } as unknown as import('fastify').FastifyBaseLogger);
+    routeMessage(ws, raw, userId, mockLog);
     expect(ws.close).toHaveBeenCalledWith(4002, 'Missing or invalid content');
   });
 
@@ -115,8 +131,21 @@ describe('messageWsHandler', () => {
       payload: { channelId, content: 'blob' },
     });
 
-    routeMessage(ws, raw, userId, { warn: vi.fn(), info: vi.fn(), error: vi.fn() } as unknown as import('fastify').FastifyBaseLogger);
+    routeMessage(ws, raw, userId, mockLog);
     expect(ws.close).toHaveBeenCalledWith(4002, 'Missing or invalid nonce');
+  });
+
+  it('closes connection when content exceeds MAX_MESSAGE_LENGTH', () => {
+    const ws = createMockSocket();
+    clients.set(userId, ws);
+
+    const raw = JSON.stringify({
+      type: 'text:send',
+      payload: { channelId, content: 'a'.repeat(2001), nonce: 'nonce' },
+    });
+
+    routeMessage(ws, raw, userId, mockLog);
+    expect(ws.close).toHaveBeenCalledWith(4002, 'Message content exceeds maximum length');
   });
 
   it('does not send to clients with closed connections', () => {
@@ -130,7 +159,7 @@ describe('messageWsHandler', () => {
       payload: { channelId, content: 'blob', nonce: 'nonce' },
     });
 
-    routeMessage(senderWs, raw, userId, { warn: vi.fn(), info: vi.fn(), error: vi.fn() } as unknown as import('fastify').FastifyBaseLogger);
+    routeMessage(senderWs, raw, userId, mockLog);
 
     expect(senderWs.send).toHaveBeenCalledOnce();
     expect(closedWs.send).not.toHaveBeenCalled();
@@ -146,11 +175,45 @@ describe('messageWsHandler', () => {
       id: 'my-temp-id',
     });
 
-    routeMessage(senderWs, raw, userId, { warn: vi.fn(), info: vi.fn(), error: vi.fn() } as unknown as import('fastify').FastifyBaseLogger);
+    routeMessage(senderWs, raw, userId, mockLog);
 
     expect(senderWs.send).toHaveBeenCalledOnce();
     const sent = JSON.parse((senderWs.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
     expect(sent.id).toBe('my-temp-id');
     expect(sent.payload.authorId).toBe(userId);
+  });
+
+  it('closes connection on DB error (e.g., invalid channelId)', () => {
+    const ws = createMockSocket();
+    clients.set(userId, ws);
+
+    const raw = JSON.stringify({
+      type: 'text:send',
+      payload: { channelId: 'non-existent-channel', content: 'blob', nonce: 'nonce' },
+    });
+
+    routeMessage(ws, raw, userId, mockLog);
+
+    expect(ws.close).toHaveBeenCalledWith(4003, 'Failed to store message');
+    expect((mockLog.error as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
+  });
+
+  it('logs warning when broadcast send fails', () => {
+    const senderWs = createMockSocket();
+    const failingWs = createMockSocket();
+    (failingWs.send as ReturnType<typeof vi.fn>).mockImplementation(() => { throw new Error('Send failed'); });
+    clients.set(userId, senderWs);
+    clients.set('failing-user', failingWs);
+
+    const raw = JSON.stringify({
+      type: 'text:send',
+      payload: { channelId, content: 'blob', nonce: 'nonce' },
+    });
+
+    routeMessage(senderWs, raw, userId, mockLog);
+
+    expect((mockLog.warn as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
+    // Sender still receives (broadcast continues despite one client failing)
+    expect(senderWs.send).toHaveBeenCalledOnce();
   });
 });

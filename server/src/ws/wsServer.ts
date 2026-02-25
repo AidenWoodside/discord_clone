@@ -27,7 +27,7 @@ export default fp(async function wsServer(fastify) {
   });
 
   // Register message handlers
-  registerMessageHandlers(clients, fastify.db);
+  registerMessageHandlers(clients, fastify.db, fastify.log);
 
   fastify.get('/ws', { websocket: true }, (socket, request) => {
     const url = new URL(request.url, 'http://localhost');

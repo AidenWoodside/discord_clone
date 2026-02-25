@@ -11,6 +11,12 @@ export interface CreateMessageResult {
   createdAt: string;
 }
 
+export function toISOTimestamp(created_at: Date | unknown): string {
+  return created_at instanceof Date
+    ? created_at.toISOString()
+    : new Date((created_at as number) * 1000).toISOString();
+}
+
 export function createMessage(
   db: AppDatabase,
   channelId: string,
@@ -31,9 +37,7 @@ export function createMessage(
     userId: row.user_id,
     encryptedContent: row.encrypted_content,
     nonce: row.nonce,
-    createdAt: row.created_at instanceof Date
-      ? row.created_at.toISOString()
-      : new Date(row.created_at as unknown as number * 1000).toISOString(),
+    createdAt: toISOTimestamp(row.created_at),
   };
 }
 

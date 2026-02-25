@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import useMessageStore from '../../stores/useMessageStore';
 import { usePresenceStore } from '../../stores/usePresenceStore';
+import { sendMessage } from '../../services/messageService';
 
 interface MessageInputProps {
   channelId: string;
@@ -10,7 +11,6 @@ interface MessageInputProps {
 export default function MessageInput({ channelId, channelName }: MessageInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const sendMessage = useMessageStore((s) => s.sendMessage);
   const sendError = useMessageStore((s) => s.sendError);
   const clearSendError = useMessageStore((s) => s.clearSendError);
   const connectionState = usePresenceStore((s) => s.connectionState);

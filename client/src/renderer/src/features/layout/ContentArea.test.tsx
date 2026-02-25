@@ -7,6 +7,16 @@ import { useUIStore } from '../../stores/useUIStore';
 import useMessageStore from '../../stores/useMessageStore';
 import { usePresenceStore } from '../../stores/usePresenceStore';
 
+const { mockFetchMessages } = vi.hoisted(() => ({
+  mockFetchMessages: vi.fn(),
+}));
+
+// Mock messageService
+vi.mock('../../services/messageService', () => ({
+  sendMessage: vi.fn(),
+  fetchMessages: mockFetchMessages,
+}));
+
 // Mock encryptionService
 vi.mock('../../services/encryptionService', () => ({
   encryptMessage: vi.fn(() => ({ ciphertext: 'enc', nonce: 'n' })),
@@ -71,6 +81,7 @@ beforeEach(() => {
     isLoading: false,
     error: null,
   });
+  vi.clearAllMocks();
 });
 
 function renderContentArea(channelId?: string) {
@@ -93,7 +104,6 @@ describe('ContentArea', () => {
 
   it('shows welcome message for selected channel with no messages', async () => {
     renderContentArea('ch-1');
-    // Wait for fetchMessages to complete (async)
     await waitFor(() => {
       expect(screen.getByText('Welcome to #general')).toBeInTheDocument();
     });
@@ -111,6 +121,13 @@ describe('ContentArea', () => {
     renderContentArea('ch-1');
     await waitFor(() => {
       expect(useChannelStore.getState().activeChannelId).toBe('ch-1');
+    });
+  });
+
+  it('calls fetchMessages service on channel change', async () => {
+    renderContentArea('ch-1');
+    await waitFor(() => {
+      expect(mockFetchMessages).toHaveBeenCalledWith('ch-1');
     });
   });
 
@@ -152,15 +169,13 @@ describe('ContentArea', () => {
     expect(screen.getByText('Loading messages...')).toBeInTheDocument();
   });
 
-  it('displays messages when they exist', async () => {
-    // Pre-set messages in store — fetchMessages will overwrite, but the apiRequest mock
-    // returns [], so wait for the fetch to complete first, then set messages
+  it('shows error state when message fetch fails', () => {
+    useMessageStore.setState({ error: 'Network error' });
     renderContentArea('ch-1');
-    await waitFor(() => {
-      expect(useMessageStore.getState().isLoading).toBe(false);
-    });
+    expect(screen.getByText('Failed to load messages. Please try again.')).toBeInTheDocument();
+  });
 
-    // Now set messages after fetch completed
+  it('displays messages when they exist', async () => {
     useMessageStore.setState({
       messages: new Map([
         ['ch-1', [
@@ -176,17 +191,14 @@ describe('ContentArea', () => {
       ]),
     });
 
+    renderContentArea('ch-1');
+
     await waitFor(() => {
       expect(screen.getByText('Hello world')).toBeInTheDocument();
     });
   });
 
   it('shows failed message indicator', async () => {
-    renderContentArea('ch-1');
-    await waitFor(() => {
-      expect(useMessageStore.getState().isLoading).toBe(false);
-    });
-
     useMessageStore.setState({
       messages: new Map([
         ['ch-1', [
@@ -202,6 +214,8 @@ describe('ContentArea', () => {
         ]],
       ]),
     });
+
+    renderContentArea('ch-1');
 
     await waitFor(() => {
       expect(screen.getByText('Message not delivered')).toBeInTheDocument();

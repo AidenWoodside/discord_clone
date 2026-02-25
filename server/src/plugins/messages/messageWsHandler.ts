@@ -1,5 +1,6 @@
 import type { WebSocket } from 'ws';
-import { WS_TYPES } from 'discord-clone-shared';
+import type { FastifyBaseLogger } from 'fastify';
+import { WS_TYPES, MAX_MESSAGE_LENGTH } from 'discord-clone-shared';
 import type { WsMessage, TextSendPayload, TextReceivePayload } from 'discord-clone-shared';
 import { registerHandler } from '../../ws/wsRouter.js';
 import { createMessage } from './messageService.js';
@@ -8,6 +9,7 @@ import type { AppDatabase } from '../../db/connection.js';
 export function registerMessageHandlers(
   clients: Map<string, WebSocket>,
   db: AppDatabase,
+  log: FastifyBaseLogger,
 ): void {
   registerHandler(WS_TYPES.TEXT_SEND, (ws, message, userId) => {
     const payload = message.payload as TextSendPayload;
@@ -25,9 +27,20 @@ export function registerMessageHandlers(
       ws.close(4002, 'Missing or invalid nonce');
       return;
     }
+    if (payload.content.length > MAX_MESSAGE_LENGTH) {
+      ws.close(4002, 'Message content exceeds maximum length');
+      return;
+    }
 
     // Store encrypted message
-    const stored = createMessage(db, payload.channelId, userId, payload.content, payload.nonce);
+    let stored;
+    try {
+      stored = createMessage(db, payload.channelId, userId, payload.content, payload.nonce);
+    } catch (err) {
+      log.error({ error: (err as Error).message, channelId: payload.channelId }, 'Failed to store message');
+      ws.close(4003, 'Failed to store message');
+      return;
+    }
 
     // Build text:receive payload
     const receivePayload: TextReceivePayload = {
@@ -52,8 +65,8 @@ export function registerMessageHandlers(
       if (clientWs.readyState === clientWs.OPEN) {
         try {
           clientWs.send(data);
-        } catch {
-          // Failed to send to this client — continue broadcasting
+        } catch (err) {
+          log.warn({ error: (err as Error).message }, 'Failed to send message to client');
         }
       }
     }

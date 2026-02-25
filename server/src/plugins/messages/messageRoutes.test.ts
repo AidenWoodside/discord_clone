@@ -102,6 +102,18 @@ describe('GET /api/channels/:channelId/messages', () => {
     expect(response.statusCode).toBe(401);
   });
 
+  it('returns 404 for non-existent channel', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/channels/non-existent-id/messages',
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.payload);
+    expect(body.error.code).toBe('CHANNEL_NOT_FOUND');
+  });
+
   it('supports before cursor pagination', async () => {
     createMessage(app.db, channelId, userId, 'first', 'n1');
     createMessage(app.db, channelId, userId, 'second', 'n2');

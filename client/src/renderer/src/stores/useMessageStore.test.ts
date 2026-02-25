@@ -1,46 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import type { TextReceivePayload } from 'discord-clone-shared';
-
-const { mockSend, mockApiRequest } = vi.hoisted(() => ({
-  mockSend: vi.fn(),
-  mockApiRequest: vi.fn(),
-}));
-
-// Mock encryptionService
-vi.mock('../services/encryptionService', () => ({
-  encryptMessage: vi.fn((plaintext: string) => ({
-    ciphertext: `encrypted:${plaintext}`,
-    nonce: 'mock-nonce',
-  })),
-  decryptMessage: vi.fn((ciphertext: string) =>
-    ciphertext.startsWith('encrypted:') ? ciphertext.slice(10) : `decrypted:${ciphertext}`,
-  ),
-}));
-
-// Mock wsClient
-vi.mock('../services/wsClient', () => ({
-  wsClient: { send: mockSend },
-}));
-
-// Mock apiClient
-vi.mock('../services/apiClient', () => ({
-  apiRequest: (...args: unknown[]) => mockApiRequest(...args),
-}));
-
-// Mock useAuthStore
-vi.mock('./useAuthStore', () => ({
-  default: {
-    getState: () => ({
-      groupKey: new Uint8Array(32),
-      user: { id: 'current-user', username: 'me', role: 'user' },
-    }),
-  },
-}));
-
-// Mock crypto.randomUUID
-vi.stubGlobal('crypto', { randomUUID: () => 'mock-uuid-1234' });
-
 import useMessageStore from './useMessageStore';
+import type { DecryptedMessage } from './useMessageStore';
 
 beforeEach(() => {
   useMessageStore.setState({
@@ -50,104 +11,145 @@ beforeEach(() => {
     error: null,
     sendError: null,
   });
-  vi.clearAllMocks();
 });
 
 describe('useMessageStore', () => {
-  describe('sendMessage', () => {
-    it('encrypts message before sending via WebSocket', () => {
-      useMessageStore.getState().sendMessage('ch-1', 'Hello world');
-
-      expect(mockSend).toHaveBeenCalledOnce();
-      const sent = mockSend.mock.calls[0][0];
-      expect(sent.type).toBe('text:send');
-      expect(sent.payload.content).toBe('encrypted:Hello world');
-      expect(sent.payload.nonce).toBe('mock-nonce');
-      expect(sent.payload.channelId).toBe('ch-1');
-      expect(sent.id).toBe('mock-uuid-1234');
-    });
-
-    it('adds optimistic message with sending status', () => {
-      useMessageStore.getState().sendMessage('ch-1', 'Test');
-
-      const messages = useMessageStore.getState().messages.get('ch-1');
-      expect(messages).toHaveLength(1);
-      expect(messages![0].content).toBe('Test');
-      expect(messages![0].status).toBe('sending');
-      expect(messages![0].tempId).toBe('mock-uuid-1234');
-    });
-
-    it('clears sendError on successful send', () => {
-      useMessageStore.setState({ sendError: 'previous error' });
-      useMessageStore.getState().sendMessage('ch-1', 'Test');
-      expect(useMessageStore.getState().sendError).toBeNull();
-    });
-
-    it('marks message failed if wsClient.send throws', () => {
-      mockSend.mockImplementation(() => { throw new Error('Not connected'); });
-
-      useMessageStore.getState().sendMessage('ch-1', 'Fail');
-
-      const messages = useMessageStore.getState().messages.get('ch-1');
-      expect(messages![0].status).toBe('failed');
-    });
-  });
-
-  describe('addReceivedMessage', () => {
-    it('decrypts and adds message from another user', () => {
-      const payload: TextReceivePayload = {
-        messageId: 'msg-1',
+  describe('addOptimisticMessage', () => {
+    it('adds message to the specified channel', () => {
+      const msg: DecryptedMessage = {
+        id: 'temp-1',
         channelId: 'ch-1',
-        authorId: 'other-user',
-        content: 'encrypted:Hello',
-        nonce: 'nonce-1',
+        authorId: 'user-1',
+        content: 'Hello',
         createdAt: '2024-01-01T00:00:00.000Z',
+        status: 'sending',
+        tempId: 'temp-1',
       };
 
-      useMessageStore.getState().addReceivedMessage(payload);
+      useMessageStore.getState().addOptimisticMessage('ch-1', msg);
 
       const messages = useMessageStore.getState().messages.get('ch-1');
       expect(messages).toHaveLength(1);
       expect(messages![0].content).toBe('Hello');
-      expect(messages![0].status).toBe('sent');
-      expect(messages![0].id).toBe('msg-1');
+      expect(messages![0].status).toBe('sending');
     });
 
-    it('handles decryption failure gracefully', async () => {
-      const { decryptMessage } = await import('../services/encryptionService');
-      (decryptMessage as ReturnType<typeof vi.fn>).mockImplementationOnce(() => { throw new Error('Decrypt failed'); });
-
-      const payload: TextReceivePayload = {
-        messageId: 'msg-2',
+    it('appends to existing messages', () => {
+      const msg1: DecryptedMessage = {
+        id: 'msg-1',
         channelId: 'ch-1',
-        authorId: 'other-user',
-        content: 'bad-data',
-        nonce: 'bad-nonce',
+        authorId: 'user-1',
+        content: 'First',
         createdAt: '2024-01-01T00:00:00.000Z',
+        status: 'sent',
       };
+      useMessageStore.getState().setMessages('ch-1', [msg1]);
 
-      useMessageStore.getState().addReceivedMessage(payload);
+      const msg2: DecryptedMessage = {
+        id: 'temp-2',
+        channelId: 'ch-1',
+        authorId: 'user-1',
+        content: 'Second',
+        createdAt: '2024-01-01T00:01:00.000Z',
+        status: 'sending',
+        tempId: 'temp-2',
+      };
+      useMessageStore.getState().addOptimisticMessage('ch-1', msg2);
 
       const messages = useMessageStore.getState().messages.get('ch-1');
-      expect(messages![0].content).toBe('[Decryption failed]');
+      expect(messages).toHaveLength(2);
+    });
+
+    it('clears sendError when adding optimistic message', () => {
+      useMessageStore.setState({ sendError: 'previous error' });
+      const msg: DecryptedMessage = {
+        id: 'temp-1',
+        channelId: 'ch-1',
+        authorId: 'user-1',
+        content: 'Test',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        status: 'sending',
+        tempId: 'temp-1',
+      };
+      useMessageStore.getState().addOptimisticMessage('ch-1', msg);
+      expect(useMessageStore.getState().sendError).toBeNull();
+    });
+  });
+
+  describe('setMessages', () => {
+    it('replaces messages for a channel', () => {
+      const msgs: DecryptedMessage[] = [
+        {
+          id: 'msg-1',
+          channelId: 'ch-1',
+          authorId: 'user-1',
+          content: 'Hello',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          status: 'sent',
+        },
+        {
+          id: 'msg-2',
+          channelId: 'ch-1',
+          authorId: 'user-2',
+          content: 'World',
+          createdAt: '2024-01-01T00:01:00.000Z',
+          status: 'sent',
+        },
+      ];
+
+      useMessageStore.getState().setMessages('ch-1', msgs);
+
+      const messages = useMessageStore.getState().messages.get('ch-1');
+      expect(messages).toHaveLength(2);
+      expect(messages![0].content).toBe('Hello');
+      expect(messages![1].content).toBe('World');
+    });
+  });
+
+  describe('addReceivedMessage', () => {
+    it('adds a pre-decrypted message to the channel', () => {
+      const msg: DecryptedMessage = {
+        id: 'msg-1',
+        channelId: 'ch-1',
+        authorId: 'other-user',
+        content: 'Hello from another user',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        status: 'sent',
+      };
+
+      useMessageStore.getState().addReceivedMessage(msg);
+
+      const messages = useMessageStore.getState().messages.get('ch-1');
+      expect(messages).toHaveLength(1);
+      expect(messages![0].content).toBe('Hello from another user');
+      expect(messages![0].status).toBe('sent');
+      expect(messages![0].id).toBe('msg-1');
     });
   });
 
   describe('confirmMessage', () => {
     it('updates optimistic message with server data', () => {
-      // Add optimistic message
-      useMessageStore.getState().sendMessage('ch-1', 'Test');
+      const optimistic: DecryptedMessage = {
+        id: 'temp-1',
+        channelId: 'ch-1',
+        authorId: 'user-1',
+        content: 'Test',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        status: 'sending',
+        tempId: 'temp-1',
+      };
+      useMessageStore.getState().addOptimisticMessage('ch-1', optimistic);
 
       const serverPayload: TextReceivePayload = {
         messageId: 'server-id-1',
         channelId: 'ch-1',
-        authorId: 'current-user',
+        authorId: 'user-1',
         content: 'encrypted:Test',
         nonce: 'mock-nonce',
         createdAt: '2024-01-01T12:00:00.000Z',
       };
 
-      useMessageStore.getState().confirmMessage('mock-uuid-1234', serverPayload);
+      useMessageStore.getState().confirmMessage('temp-1', serverPayload);
 
       const messages = useMessageStore.getState().messages.get('ch-1');
       expect(messages![0].id).toBe('server-id-1');
@@ -155,12 +157,36 @@ describe('useMessageStore', () => {
       expect(messages![0].createdAt).toBe('2024-01-01T12:00:00.000Z');
       expect(messages![0].tempId).toBeUndefined();
     });
+
+    it('does nothing if channel has no messages', () => {
+      const serverPayload: TextReceivePayload = {
+        messageId: 'server-id-1',
+        channelId: 'ch-1',
+        authorId: 'user-1',
+        content: 'encrypted:Test',
+        nonce: 'nonce',
+        createdAt: '2024-01-01T12:00:00.000Z',
+      };
+
+      useMessageStore.getState().confirmMessage('temp-1', serverPayload);
+
+      expect(useMessageStore.getState().messages.get('ch-1')).toBeUndefined();
+    });
   });
 
   describe('markMessageFailed', () => {
     it('sets message status to failed and sets sendError', () => {
-      useMessageStore.getState().sendMessage('ch-1', 'Test');
-      useMessageStore.getState().markMessageFailed('mock-uuid-1234');
+      const msg: DecryptedMessage = {
+        id: 'temp-1',
+        channelId: 'ch-1',
+        authorId: 'user-1',
+        content: 'Test',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        status: 'sending',
+        tempId: 'temp-1',
+      };
+      useMessageStore.getState().addOptimisticMessage('ch-1', msg);
+      useMessageStore.getState().markMessageFailed('temp-1');
 
       const messages = useMessageStore.getState().messages.get('ch-1');
       expect(messages![0].status).toBe('failed');
@@ -168,51 +194,27 @@ describe('useMessageStore', () => {
     });
   });
 
-  describe('fetchMessages', () => {
-    it('fetches, decrypts, and stores messages', async () => {
-      mockApiRequest.mockResolvedValue([
-        {
-          messageId: 'msg-1',
-          channelId: 'ch-1',
-          authorId: 'user-1',
-          content: 'encrypted:Hello',
-          nonce: 'n1',
-          createdAt: '2024-01-01T00:00:00.000Z',
-        },
-        {
-          messageId: 'msg-2',
-          channelId: 'ch-1',
-          authorId: 'user-2',
-          content: 'encrypted:World',
-          nonce: 'n2',
-          createdAt: '2024-01-01T00:01:00.000Z',
-        },
-      ]);
-
-      await useMessageStore.getState().fetchMessages('ch-1');
-
-      const messages = useMessageStore.getState().messages.get('ch-1');
-      expect(messages).toHaveLength(2);
-      // Reversed from DESC order to chronological
-      expect(messages![0].content).toBe('World');
-      expect(messages![1].content).toBe('Hello');
-      expect(useMessageStore.getState().isLoading).toBe(false);
-    });
-
-    it('sets error on fetch failure', async () => {
-      mockApiRequest.mockRejectedValue(new Error('Network error'));
-
-      await useMessageStore.getState().fetchMessages('ch-1');
-
-      expect(useMessageStore.getState().error).toBe('Network error');
-      expect(useMessageStore.getState().isLoading).toBe(false);
-    });
-  });
-
   describe('setCurrentChannel', () => {
     it('updates currentChannelId', () => {
       useMessageStore.getState().setCurrentChannel('ch-2');
       expect(useMessageStore.getState().currentChannelId).toBe('ch-2');
+    });
+  });
+
+  describe('setLoading / setError / setSendError', () => {
+    it('sets loading state', () => {
+      useMessageStore.getState().setLoading(true);
+      expect(useMessageStore.getState().isLoading).toBe(true);
+    });
+
+    it('sets error state', () => {
+      useMessageStore.getState().setError('something went wrong');
+      expect(useMessageStore.getState().error).toBe('something went wrong');
+    });
+
+    it('sets sendError state', () => {
+      useMessageStore.getState().setSendError('send failed');
+      expect(useMessageStore.getState().sendError).toBe('send failed');
     });
   });
 

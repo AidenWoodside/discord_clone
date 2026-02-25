@@ -5,6 +5,7 @@ import { useChannelStore } from '../../stores/useChannelStore';
 import { useUIStore } from '../../stores/useUIStore';
 import useMessageStore from '../../stores/useMessageStore';
 import type { DecryptedMessage } from '../../stores/useMessageStore';
+import { fetchMessages } from '../../services/messageService';
 import { ConnectionBanner } from './ConnectionBanner';
 import MessageInput from '../messages/MessageInput';
 
@@ -16,10 +17,10 @@ export function ContentArea(): React.ReactNode {
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
   const isMemberListVisible = useUIStore((s) => s.isMemberListVisible);
   const toggleMemberList = useUIStore((s) => s.toggleMemberList);
-  const fetchMessages = useMessageStore((s) => s.fetchMessages);
   const setCurrentChannel = useMessageStore((s) => s.setCurrentChannel);
   const channelMessages = useMessageStore((s) => channelId ? s.messages.get(channelId) ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
   const isLoadingMessages = useMessageStore((s) => s.isLoading);
+  const messageError = useMessageStore((s) => s.error);
 
   useEffect(() => {
     if (channelId) {
@@ -27,7 +28,7 @@ export function ContentArea(): React.ReactNode {
       setCurrentChannel(channelId);
       fetchMessages(channelId);
     }
-  }, [channelId, setActiveChannel, setCurrentChannel, fetchMessages]);
+  }, [channelId, setActiveChannel, setCurrentChannel]);
 
   const channel = channels.find((c) => c.id === channelId);
 
@@ -47,10 +48,14 @@ export function ContentArea(): React.ReactNode {
     <>
       <ContentHeader channelName={channel.name} isMemberListVisible={isMemberListVisible} onToggleMemberList={toggleMemberList} />
       <ConnectionBanner />
-      <div className="flex-1 overflow-y-auto flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0">
         {isLoadingMessages ? (
           <div className="flex-1 flex items-center justify-center">
             <p className="text-text-muted">Loading messages...</p>
+          </div>
+        ) : messageError ? (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-[#f23f43]">Failed to load messages. Please try again.</p>
           </div>
         ) : channelMessages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">

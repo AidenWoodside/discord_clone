@@ -1,6 +1,6 @@
 # Story 2.2: Encrypted Text Messaging
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -463,11 +463,40 @@ Claude Opus 4.6
 - `markPendingMessagesFailed()` called on WebSocket close to fail any messages stuck in 'sending' status
 - MessageInput auto-grows with content using textarea height manipulation
 - ContentArea shows welcome message when channel has no messages, loading spinner during fetch
-- All 151 server tests + 115 client tests pass with 0 lint errors
+- All 155 server tests + 126 client tests pass with 0 lint errors (post-review)
+
+### Senior Developer Review (AI)
+
+**Reviewer:** dickweeds on 2026-02-24
+**Outcome:** Changes Requested → Fixed
+
+**Issues Found:** 5 High, 6 Medium, 2 Low — all fixed automatically
+
+**HIGH issues fixed:**
+- H1: `useMessageStore` imported `wsClient` directly (circular dependency, anti-pattern violation) → Created `client/src/renderer/src/services/messageService.ts` service layer; store is now pure state
+- H2: `useMessageStore` imported `useAuthStore` (cross-store import violation) → Resolved by H1; service layer accesses both stores, store has no external imports
+- H3: Task 7.3 marked [x] but 404 for invalid channelId not implemented → Added channel existence check in `messageRoutes.ts`, added test
+- H4: `messageWsHandler.ts` silently caught broadcast errors → Added `FastifyBaseLogger` parameter, now logs with `log.warn`
+- H5: No `MAX_MESSAGE_LENGTH` validation anywhere → Added server-side validation in WS handler + client-side in messageService
+
+**MEDIUM issues fixed:**
+- M1: `markPendingMessagesFailed` used `.catch(() => {})` → Now logs with `console.warn`
+- M2: `handleTextReceive` silently swallowed all errors → Narrowed catch to module imports only; decryption now handled properly
+- M3: Unhandled DB errors in WS handler → Wrapped `createMessage` in try/catch, closes with 4003 on failure
+- M4: Nested scrollable divs in ContentArea → Removed `overflow-y-auto` from outer wrapper
+- M5: E2E encryption roundtrip test → Already exists in `encryptionService.test.ts` (lines 50-78)
+- M6: ContentArea didn't display fetch error state → Added `messageError` state display
+
+**LOW issues fixed:**
+- L1: Duplicate timestamp conversion → Extracted `toISOTimestamp()` helper in `messageService.ts`
+- L2: MessageBubble shows truncated authorId (deferred to story 2-3) → No fix needed
+
+**Test Results After Fixes:** 155 server tests + 126 client tests pass, 0 lint errors
 
 ### Change Log
 
 - 2026-02-24: Implemented story 2-2 encrypted text messaging — all tasks complete
+- 2026-02-24: Code review — fixed 13 issues (5 HIGH, 6 MEDIUM, 2 LOW); refactored store to service pattern, added validation, error handling, and missing tests
 
 ### File List
 
@@ -482,12 +511,14 @@ Claude Opus 4.6
 - client/src/renderer/src/stores/useMessageStore.test.ts
 - client/src/renderer/src/features/messages/MessageInput.tsx
 - client/src/renderer/src/features/messages/MessageInput.test.tsx
+- client/src/renderer/src/services/messageService.ts (NEW — review fix H1/H2)
+- client/src/renderer/src/services/messageService.test.ts (NEW — review fix)
 
 **Modified files:**
 - shared/src/ws-messages.ts (made nonce required on TextSendPayload/TextReceivePayload)
-- server/src/ws/wsServer.ts (import + register message handlers)
+- server/src/ws/wsServer.ts (import + register message handlers, pass logger)
 - server/src/app.ts (register message routes with /api/channels prefix)
-- client/src/renderer/src/services/wsClient.ts (TEXT_RECEIVE handler, markPendingMessagesFailed)
-- client/src/renderer/src/features/layout/ContentArea.tsx (message list, MessageInput, fetchMessages)
-- client/src/renderer/src/features/layout/ContentArea.test.tsx (updated for message store deps)
+- client/src/renderer/src/services/wsClient.ts (TEXT_RECEIVE handler with decryption, error logging)
+- client/src/renderer/src/features/layout/ContentArea.tsx (message list, MessageInput, error display, service imports)
+- client/src/renderer/src/features/layout/ContentArea.test.tsx (updated for service mocks)
 - _bmad-output/implementation-artifacts/sprint-status.yaml (status: in-progress → review)

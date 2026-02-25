@@ -8,15 +8,14 @@ vi.hoisted(() => {
 });
 vi.stubEnv('DATABASE_PATH', ':memory:');
 
-import { setupApp, seedUserWithSession } from '../../test/helpers.js';
-import { channels } from '../../db/schema.js';
+import { setupApp, seedUserWithSession, seedOwner, seedRegularUser } from '../../test/helpers.js';
+import { channels, messages } from '../../db/schema.js';
 
 describe('GET /api/channels', () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
     app = await setupApp();
-    // Seed channels
     app.db.insert(channels).values([
       { name: 'general', type: 'text' },
       { name: 'Gaming', type: 'voice' },
@@ -67,5 +66,192 @@ describe('GET /api/channels', () => {
     expect(response.statusCode).toBe(401);
     const body = JSON.parse(response.payload);
     expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+});
+
+describe('POST /api/channels', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    app = await setupApp();
+  });
+
+  it('creates a text channel with valid owner token', async () => {
+    const { token } = await seedOwner(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/channels',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: 'new-channel', type: 'text' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = JSON.parse(response.payload);
+    expect(body.data).toHaveProperty('id');
+    expect(body.data.name).toBe('new-channel');
+    expect(body.data.type).toBe('text');
+    expect(body.data).toHaveProperty('createdAt');
+  });
+
+  it('creates a voice channel', async () => {
+    const { token } = await seedOwner(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/channels',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: 'voice-chat', type: 'voice' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = JSON.parse(response.payload);
+    expect(body.data.type).toBe('voice');
+  });
+
+  it('lowercases and hyphenates channel name', async () => {
+    const { token } = await seedOwner(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/channels',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: 'My New Channel', type: 'text' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = JSON.parse(response.payload);
+    expect(body.data.name).toBe('my-new-channel');
+  });
+
+  it('returns 403 with non-owner token', async () => {
+    const { token } = await seedRegularUser(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/channels',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: 'new-channel', type: 'text' },
+    });
+
+    expect(response.statusCode).toBe(403);
+    const body = JSON.parse(response.payload);
+    expect(body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('returns 400 with missing body fields', async () => {
+    const { token } = await seedOwner(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/channels',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns 400 with empty name', async () => {
+    const { token } = await seedOwner(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/channels',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: '', type: 'text' },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns 400 with invalid type', async () => {
+    const { token } = await seedOwner(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/channels',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: 'test', type: 'invalid' },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+});
+
+describe('DELETE /api/channels/:channelId', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    app = await setupApp();
+  });
+
+  it('deletes a channel with valid owner token', async () => {
+    const { token } = await seedOwner(app);
+    const channel = app.db.insert(channels).values({ name: 'to-delete', type: 'text' }).returning().get();
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: `/api/channels/${channel.id}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(204);
+
+    // Verify channel is gone
+    const remaining = app.db.select().from(channels).all();
+    expect(remaining).toHaveLength(0);
+  });
+
+  it('returns 403 with non-owner token', async () => {
+    const { token } = await seedRegularUser(app);
+    const channel = app.db.insert(channels).values({ name: 'test', type: 'text' }).returning().get();
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: `/api/channels/${channel.id}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(403);
+    const body = JSON.parse(response.payload);
+    expect(body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('returns 404 for non-existent channel', async () => {
+    const { token } = await seedOwner(app);
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/api/channels/non-existent-id',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.payload);
+    expect(body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('cascades: deletes messages when channel is deleted', async () => {
+    const { token, id: ownerId } = await seedOwner(app);
+    const channel = app.db.insert(channels).values({ name: 'with-messages', type: 'text' }).returning().get();
+
+    // Seed messages
+    app.db.insert(messages).values([
+      { channel_id: channel.id, user_id: ownerId, encrypted_content: 'msg1', nonce: 'n1' },
+      { channel_id: channel.id, user_id: ownerId, encrypted_content: 'msg2', nonce: 'n2' },
+    ]).run();
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: `/api/channels/${channel.id}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(204);
+
+    // Verify messages are gone
+    const remainingMessages = app.db.select().from(messages).all();
+    expect(remainingMessages).toHaveLength(0);
   });
 });

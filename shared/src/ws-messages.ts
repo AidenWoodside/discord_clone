@@ -47,6 +47,20 @@ export interface PresenceSyncPayload {
   users: PresenceUpdatePayload[];
 }
 
+// Channel events
+export interface ChannelCreatedPayload {
+  channel: {
+    id: string;
+    name: string;
+    type: 'text' | 'voice';
+    createdAt: string;
+  };
+}
+
+export interface ChannelDeletedPayload {
+  channelId: string;
+}
+
 // Type constants for namespace:action pattern
 export const WS_TYPES = {
   TEXT_SEND: 'text:send',
@@ -59,5 +73,7 @@ export const WS_TYPES = {
   PRESENCE_UPDATE: 'presence:update',
   PRESENCE_SYNC: 'presence:sync',
   CHANNEL_UPDATE: 'channel:update',
+  CHANNEL_CREATED: 'channel:created',
+  CHANNEL_DELETED: 'channel:deleted',
   USER_UPDATE: 'user:update',
 } as const;

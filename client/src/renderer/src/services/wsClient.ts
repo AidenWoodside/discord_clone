@@ -1,6 +1,7 @@
-import type { WsMessage, PresenceUpdatePayload, PresenceSyncPayload } from 'discord-clone-shared';
+import type { WsMessage, PresenceUpdatePayload, PresenceSyncPayload, ChannelCreatedPayload, ChannelDeletedPayload } from 'discord-clone-shared';
 import { WS_TYPES, WS_RECONNECT_DELAY, WS_MAX_RECONNECT_DELAY } from 'discord-clone-shared';
 import { usePresenceStore } from '../stores/usePresenceStore';
+import { useChannelStore } from '../stores/useChannelStore';
 
 type MessageCallback = (payload: unknown) => void;
 
@@ -114,6 +115,12 @@ class WsClient {
     } else if (message.type === WS_TYPES.PRESENCE_SYNC) {
       const payload = message.payload as PresenceSyncPayload;
       usePresenceStore.getState().syncOnlineUsers(payload.users);
+    } else if (message.type === WS_TYPES.CHANNEL_CREATED) {
+      const payload = message.payload as ChannelCreatedPayload;
+      useChannelStore.getState().addChannel(payload.channel);
+    } else if (message.type === WS_TYPES.CHANNEL_DELETED) {
+      const payload = message.payload as ChannelDeletedPayload;
+      useChannelStore.getState().removeChannel(payload.channelId);
     }
 
     // Dispatch to registered handlers

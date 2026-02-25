@@ -78,4 +78,104 @@ describe('useChannelStore', () => {
     useChannelStore.getState().clearError();
     expect(useChannelStore.getState().error).toBeNull();
   });
+
+  describe('addChannel', () => {
+    it('inserts channel in sorted order (text first, then alphabetical)', () => {
+      useChannelStore.setState({
+        channels: [
+          { id: '1', name: 'general', type: 'text', createdAt: '2024-01-01' },
+          { id: '3', name: 'Gaming', type: 'voice', createdAt: '2024-01-01' },
+        ],
+      });
+
+      useChannelStore.getState().addChannel({ id: '2', name: 'help', type: 'text', createdAt: '2024-01-01' });
+
+      const { channels } = useChannelStore.getState();
+      expect(channels).toHaveLength(3);
+      expect(channels[0].name).toBe('general');
+      expect(channels[1].name).toBe('help');
+      expect(channels[2].name).toBe('Gaming');
+    });
+  });
+
+  describe('removeChannel', () => {
+    it('removes channel from list', () => {
+      useChannelStore.setState({
+        channels: [
+          { id: '1', name: 'general', type: 'text', createdAt: '2024-01-01' },
+          { id: '2', name: 'help', type: 'text', createdAt: '2024-01-01' },
+        ],
+      });
+
+      useChannelStore.getState().removeChannel('1');
+
+      const { channels } = useChannelStore.getState();
+      expect(channels).toHaveLength(1);
+      expect(channels[0].id).toBe('2');
+    });
+
+    it('redirects activeChannelId to first text channel when active channel is removed', () => {
+      useChannelStore.setState({
+        channels: [
+          { id: '1', name: 'general', type: 'text', createdAt: '2024-01-01' },
+          { id: '2', name: 'help', type: 'text', createdAt: '2024-01-01' },
+        ],
+        activeChannelId: '1',
+      });
+
+      useChannelStore.getState().removeChannel('1');
+
+      expect(useChannelStore.getState().activeChannelId).toBe('2');
+    });
+
+    it('sets activeChannelId to null when no channels remain', () => {
+      useChannelStore.setState({
+        channels: [{ id: '1', name: 'general', type: 'text', createdAt: '2024-01-01' }],
+        activeChannelId: '1',
+      });
+
+      useChannelStore.getState().removeChannel('1');
+
+      expect(useChannelStore.getState().activeChannelId).toBeNull();
+    });
+
+    it('does not change activeChannelId when a different channel is removed', () => {
+      useChannelStore.setState({
+        channels: [
+          { id: '1', name: 'general', type: 'text', createdAt: '2024-01-01' },
+          { id: '2', name: 'help', type: 'text', createdAt: '2024-01-01' },
+        ],
+        activeChannelId: '1',
+      });
+
+      useChannelStore.getState().removeChannel('2');
+
+      expect(useChannelStore.getState().activeChannelId).toBe('1');
+    });
+  });
+
+  describe('createChannel', () => {
+    it('calls API with correct params', async () => {
+      mockApiRequest.mockResolvedValueOnce(undefined);
+
+      await useChannelStore.getState().createChannel('new-channel', 'text');
+
+      expect(mockApiRequest).toHaveBeenCalledWith('/api/channels', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'new-channel', type: 'text' }),
+      });
+    });
+  });
+
+  describe('deleteChannel', () => {
+    it('calls API with correct params', async () => {
+      mockApiRequest.mockResolvedValueOnce(undefined);
+
+      await useChannelStore.getState().deleteChannel('ch-1');
+
+      expect(mockApiRequest).toHaveBeenCalledWith('/api/channels/ch-1', {
+        method: 'DELETE',
+      });
+    });
+  });
 });

@@ -1,41 +1,38 @@
 import React from 'react';
-import { ChevronDown } from 'lucide-react';
 import { useChannelStore, type ChannelListItem } from '../../stores/useChannelStore';
 import { ScrollArea } from '../../components';
 import { ChannelItem } from './ChannelItem';
+import { ChannelContextMenu } from './ChannelContextMenu';
+import { ServerHeader } from './ServerHeader';
 import { UserPanel } from '../layout/UserPanel';
+import useAuthStore from '../../stores/useAuthStore';
 
 export function ChannelSidebar(): React.ReactNode {
   const channels = useChannelStore((s) => s.channels);
   const activeChannelId = useChannelStore((s) => s.activeChannelId);
   const isLoading = useChannelStore((s) => s.isLoading);
+  const userRole = useAuthStore((s) => s.user?.role);
 
   const textChannels = channels.filter((c) => c.type === 'text');
   const voiceChannels = channels.filter((c) => c.type === 'voice');
 
   return (
     <>
-      {/* Server Header */}
-      <div className="h-12 px-4 flex items-center border-b border-border-default shadow-sm cursor-pointer hover:bg-bg-hover transition-colors duration-150">
-        <span className="text-text-primary font-semibold truncate flex-1">discord_clone</span>
-        <ChevronDown size={18} className="text-text-secondary flex-shrink-0" />
-      </div>
+      <ServerHeader />
 
-      {/* Channel List */}
       <ScrollArea className="flex-1">
         <div className="py-2">
           {isLoading ? (
             <ChannelSkeletons />
           ) : (
             <>
-              <ChannelGroup label="TEXT CHANNELS" channels={textChannels} activeChannelId={activeChannelId} />
-              <ChannelGroup label="VOICE CHANNELS" channels={voiceChannels} activeChannelId={activeChannelId} />
+              <ChannelGroup label="TEXT CHANNELS" channels={textChannels} activeChannelId={activeChannelId} isOwner={userRole === 'owner'} />
+              <ChannelGroup label="VOICE CHANNELS" channels={voiceChannels} activeChannelId={activeChannelId} isOwner={userRole === 'owner'} />
             </>
           )}
         </div>
       </ScrollArea>
 
-      {/* User Panel */}
       <UserPanel />
     </>
   );
@@ -45,10 +42,12 @@ function ChannelGroup({
   label,
   channels,
   activeChannelId,
+  isOwner,
 }: {
   label: string;
   channels: ChannelListItem[];
   activeChannelId: string | null;
+  isOwner: boolean;
 }): React.ReactNode {
   if (channels.length === 0) return null;
 
@@ -57,13 +56,25 @@ function ChannelGroup({
       <h2 className="text-text-muted text-xs font-semibold uppercase tracking-wide px-2 py-1.5">
         {label}
       </h2>
-      {channels.map((channel) => (
-        <ChannelItem
-          key={channel.id}
-          channel={channel}
-          isActive={channel.id === activeChannelId}
-        />
-      ))}
+      {channels.map((channel) => {
+        const item = (
+          <ChannelItem
+            key={channel.id}
+            channel={channel}
+            isActive={channel.id === activeChannelId}
+          />
+        );
+
+        if (isOwner) {
+          return (
+            <ChannelContextMenu key={channel.id} channelId={channel.id} channelName={channel.name}>
+              {item}
+            </ChannelContextMenu>
+          );
+        }
+
+        return item;
+      })}
     </div>
   );
 }

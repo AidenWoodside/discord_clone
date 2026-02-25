@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useParams } from 'react-router';
+import { useParams, useNavigate } from 'react-router';
 import { Hash, Users } from 'lucide-react';
 import { useChannelStore } from '../../stores/useChannelStore';
 import { useUIStore } from '../../stores/useUIStore';
@@ -8,9 +8,11 @@ import { ConnectionBanner } from './ConnectionBanner';
 export function ContentArea(): React.ReactNode {
   const { channelId } = useParams<{ channelId: string }>();
   const channels = useChannelStore((s) => s.channels);
+  const activeChannelId = useChannelStore((s) => s.activeChannelId);
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
   const isMemberListVisible = useUIStore((s) => s.isMemberListVisible);
   const toggleMemberList = useUIStore((s) => s.toggleMemberList);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (channelId) {
@@ -19,6 +21,17 @@ export function ContentArea(): React.ReactNode {
   }, [channelId, setActiveChannel]);
 
   const channel = channels.find((c) => c.id === channelId);
+
+  // Redirect when the current channel is deleted
+  useEffect(() => {
+    if (channelId && channels.length > 0 && !channel) {
+      if (activeChannelId) {
+        navigate(`/app/channels/${activeChannelId}`, { replace: true });
+      } else {
+        navigate('/app/channels', { replace: true });
+      }
+    }
+  }, [channelId, channel, channels.length, activeChannelId, navigate]);
 
   if (!channel) {
     return (

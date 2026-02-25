@@ -4,6 +4,8 @@ vi.mock('../services/voiceService', () => ({
   joinVoiceChannel: vi.fn().mockResolvedValue({ existingPeers: [] }),
   leaveVoiceChannel: vi.fn().mockResolvedValue(undefined),
   cleanupMedia: vi.fn(),
+  startVideo: vi.fn().mockResolvedValue(undefined),
+  stopVideo: vi.fn(),
 }));
 
 vi.mock('../services/mediaService', () => ({
@@ -45,6 +47,8 @@ beforeEach(() => {
     isMuted: false,
     isDeafened: false,
     speakingUsers: new Set<string>(),
+    isVideoEnabled: false,
+    videoParticipants: new Set(),
   });
   vi.clearAllMocks();
 });
@@ -468,6 +472,82 @@ describe('useVoiceStore', () => {
       const state = useVoiceStore.getState();
       expect(state.channelParticipants.get('ch-1')).toEqual(['u1', 'u2']);
       expect(state.channelParticipants.get('ch-2')).toEqual(['u3']);
+    });
+  });
+
+  describe('toggleVideo', () => {
+    it('enables video when in voice channel', async () => {
+      useVoiceStore.setState({
+        currentChannelId: 'voice-ch-1',
+        currentUserId: 'my-user-id',
+        connectionState: 'connected',
+      });
+
+      await useVoiceStore.getState().toggleVideo();
+
+      const state = useVoiceStore.getState();
+      expect(state.isVideoEnabled).toBe(true);
+      expect(state.videoParticipants.has('my-user-id')).toBe(true);
+      expect(voiceService.startVideo).toHaveBeenCalled();
+    });
+
+    it('disables video when already enabled', async () => {
+      useVoiceStore.setState({
+        currentChannelId: 'voice-ch-1',
+        currentUserId: 'my-user-id',
+        connectionState: 'connected',
+        isVideoEnabled: true,
+        videoParticipants: new Set(['my-user-id']),
+      });
+
+      await useVoiceStore.getState().toggleVideo();
+
+      const state = useVoiceStore.getState();
+      expect(state.isVideoEnabled).toBe(false);
+      expect(state.videoParticipants.has('my-user-id')).toBe(false);
+      expect(voiceService.stopVideo).toHaveBeenCalled();
+    });
+
+    it('is a no-op when not in voice channel', async () => {
+      await useVoiceStore.getState().toggleVideo();
+
+      expect(voiceService.startVideo).not.toHaveBeenCalled();
+      expect(voiceService.stopVideo).not.toHaveBeenCalled();
+      expect(useVoiceStore.getState().isVideoEnabled).toBe(false);
+    });
+  });
+
+  describe('addVideoParticipant / removeVideoParticipant', () => {
+    it('adds a video participant', () => {
+      useVoiceStore.getState().addVideoParticipant('user-1');
+      expect(useVoiceStore.getState().videoParticipants.has('user-1')).toBe(true);
+    });
+
+    it('removes a video participant', () => {
+      useVoiceStore.setState({ videoParticipants: new Set(['user-1', 'user-2']) });
+      useVoiceStore.getState().removeVideoParticipant('user-1');
+      expect(useVoiceStore.getState().videoParticipants.has('user-1')).toBe(false);
+      expect(useVoiceStore.getState().videoParticipants.has('user-2')).toBe(true);
+    });
+  });
+
+  describe('leaveChannel resets video', () => {
+    it('stops video and resets video state on leave', async () => {
+      useVoiceStore.setState({
+        currentChannelId: 'voice-ch-1',
+        currentUserId: 'my-user-id',
+        connectionState: 'connected',
+        isVideoEnabled: true,
+        videoParticipants: new Set(['my-user-id']),
+      });
+      mockLeave.mockResolvedValueOnce(undefined);
+
+      await useVoiceStore.getState().leaveChannel();
+
+      const state = useVoiceStore.getState();
+      expect(state.isVideoEnabled).toBe(false);
+      expect(state.videoParticipants.size).toBe(0);
+      expect(voiceService.stopVideo).toHaveBeenCalled();
     });
   });
 

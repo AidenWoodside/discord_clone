@@ -9,6 +9,7 @@ import {
   findProducerOwner,
   setPeerTransport,
   setPeerProducer,
+  setPeerVideoProducer,
   addPeerConsumer,
   removePeer,
   clearAllVoiceState,
@@ -179,6 +180,45 @@ describe('voiceService', () => {
     it('throws for non-existent user', () => {
       const producer = createMockProducer();
       expect(() => setPeerProducer('nonexistent', producer)).toThrow('Voice peer not found');
+    });
+  });
+
+  describe('setPeerVideoProducer', () => {
+    it('stores video producer on peer', () => {
+      joinVoiceChannel('user-1', 'channel-1', null);
+      const videoProducer = createMockProducer();
+      setPeerVideoProducer('user-1', videoProducer);
+      expect(getPeer('user-1')!.videoProducer).toBe(videoProducer);
+    });
+
+    it('throws for non-existent user', () => {
+      const videoProducer = createMockProducer();
+      expect(() => setPeerVideoProducer('nonexistent', videoProducer)).toThrow('Voice peer not found');
+    });
+  });
+
+  describe('video producer lifecycle', () => {
+    it('initializes videoProducer as null on join', () => {
+      joinVoiceChannel('user-1', 'channel-1', null);
+      expect(getPeer('user-1')!.videoProducer).toBeNull();
+    });
+
+    it('removePeer closes video producer', () => {
+      joinVoiceChannel('user-1', 'channel-1', null);
+      const videoProducer = createMockProducer();
+      setPeerVideoProducer('user-1', videoProducer);
+
+      removePeer('user-1');
+      expect(videoProducer.close).toHaveBeenCalled();
+    });
+
+    it('leaveVoiceChannel closes video producer', () => {
+      joinVoiceChannel('user-1', 'channel-1', null);
+      const videoProducer = createMockProducer();
+      setPeerVideoProducer('user-1', videoProducer);
+
+      leaveVoiceChannel('user-1');
+      expect(videoProducer.close).toHaveBeenCalled();
     });
   });
 

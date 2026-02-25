@@ -64,7 +64,7 @@ export interface VoiceConnectTransportPayload {
 
 export interface VoiceProducePayload {
   transportId: string;
-  kind: 'audio';
+  kind: 'audio' | 'video';
   rtpParameters: unknown;
 }
 
@@ -79,7 +79,7 @@ export interface VoiceConsumePayload {
 export interface VoiceConsumeResponse {
   consumerId: string;
   producerId: string;
-  kind: 'audio';
+  kind: 'audio' | 'video';
   rtpParameters: unknown;
 }
 
@@ -90,6 +90,7 @@ export interface VoiceConsumerResumePayload {
 export interface VoiceNewProducerPayload {
   producerId: string;
   peerId: string;
+  kind: 'audio' | 'video';
 }
 
 export interface VoiceProducerClosedPayload {

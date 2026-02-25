@@ -51,7 +51,8 @@ describe('authRoutes', () => {
       expect(body.data.user.username).toBe('jordan');
       expect(body.data.user.role).toBe('user');
       expect(body.data.user.id).toBeDefined();
-      expect(body.data.user.createdAt).toBeDefined();
+      expect(body.data.accessToken).toBeDefined();
+      expect(body.data.refreshToken).toBeDefined();
     });
 
     it('should normalize username by trimming and lowercasing', async () => {

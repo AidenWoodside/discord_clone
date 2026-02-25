@@ -48,7 +48,7 @@ so that all my future communications are encrypted and the server cannot read my
   - [x] 4.3 Create a one-time key generation helper: if `GROUP_ENCRYPTION_KEY` env var is not set AND no owner exists, generate key, log it to console (one-time setup), and use it
   - [x] 4.4 Add `GROUP_ENCRYPTION_KEY` to `.env.example` with documentation: "Base64-encoded 32-byte group encryption key. Generated on first server start."
   - [x] 4.5 Add module-level fail-fast validation for `GROUP_ENCRYPTION_KEY` env var in `encryptionService.ts` (same pattern as `JWT_ACCESS_SECRET`)
-  - [x] 4.6 Encrypt the group key for the owner account using the owner's public key (owner public key generated during seed or provided via env)
+  - [x] 4.6 Owner account created without publicKey/encryptedGroupKey — owner upgrades encryption via client login flow (see Deferred / Known Gaps)
 
 - [x] Task 5: Update registration to accept public key and issue encrypted group key (AC: 2)
   - [x] 5.1 Update POST `/api/auth/register` request schema to accept optional `publicKey: string` (base64-encoded X25519 public key)
@@ -482,6 +482,7 @@ Claude Opus 4.6
 ### Change Log
 
 - 2026-02-24: Implemented story 1-5 E2E Encryption Foundation — added libsodium-wrappers encryption infrastructure, server/client encryption services, updated registration/login for encryption key exchange, created RegisterPage, added 24 new tests
+- 2026-02-24: Fixed 11 code review issues — stopped logging GROUP_ENCRYPTION_KEY to Pino (H1), corrected task 4.6 docs (H2), replaced 9 empty catch blocks with console.warn (H3), replaced dynamic sodium import with deserializePublicKey service function (M1), added requireSodium() init guard to both encryption services (M2), registration now returns tokens directly eliminating double password transmission (M3), added client-side password min length enforcement (M4), added missing invite token error state to RegisterPage (M5), added _journal.json to file list (L1), removed unused createdAt from registration response (L2), added exact value assertion for getGroupKey test (L4)
 
 ### File List
 
@@ -490,6 +491,7 @@ New files:
 - server/src/services/encryptionService.test.ts
 - server/drizzle/0001_add_encrypted_group_key.sql
 - server/drizzle/meta/0001_snapshot.json
+- server/drizzle/meta/_journal.json
 - client/src/renderer/src/services/encryptionService.ts
 - client/src/renderer/src/services/encryptionService.test.ts
 - client/src/renderer/src/features/auth/RegisterPage.tsx

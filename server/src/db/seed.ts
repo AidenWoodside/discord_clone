@@ -27,7 +27,9 @@ export async function runSeed(db: AppDatabase, logger?: { info: (msg: string) =>
     const groupKey = sodium.crypto_secretbox_keygen();
     const groupKeyBase64 = sodium.to_base64(groupKey);
     process.env.GROUP_ENCRYPTION_KEY = groupKeyBase64;
-    log.info(`Generated GROUP_ENCRYPTION_KEY — save this to your .env file: ${groupKeyBase64}`);
+    log.info('Generated new GROUP_ENCRYPTION_KEY — see stderr for value');
+    process.stderr.write(`\n  GROUP_ENCRYPTION_KEY=${groupKeyBase64}\n`);
+    process.stderr.write('  Save this to your .env file. It will not be shown again.\n\n');
   }
 
   const passwordHash = await hashPassword(ownerPassword);

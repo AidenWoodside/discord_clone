@@ -33,8 +33,8 @@ const useAuthStore = create<AuthState>((set, get) => {
       try {
         await window.api.secureStorage.set('accessToken', accessToken);
         await window.api.secureStorage.set('refreshToken', refreshToken);
-      } catch {
-        // safeStorage may not be available in all environments
+      } catch (err) {
+        console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
       }
     },
     onSessionExpired: async () => {
@@ -42,8 +42,8 @@ const useAuthStore = create<AuthState>((set, get) => {
       try {
         await window.api.secureStorage.delete('accessToken');
         await window.api.secureStorage.delete('refreshToken');
-      } catch {
-        // safeStorage may not be available
+      } catch (err) {
+        console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
       }
     },
   });
@@ -81,8 +81,8 @@ const useAuthStore = create<AuthState>((set, get) => {
         try {
           await window.api.secureStorage.set('accessToken', data.accessToken);
           await window.api.secureStorage.set('refreshToken', data.refreshToken);
-        } catch {
-          // safeStorage may not be available
+        } catch (err) {
+          console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
         }
 
         // Decrypt group key if available
@@ -99,8 +99,8 @@ const useAuthStore = create<AuthState>((set, get) => {
             }
             // Store encrypted group key for session restoration
             await window.api.secureStorage.set('encrypted-group-key', data.encryptedGroupKey);
-          } catch {
-            // Encryption keys not available — user may need to re-register
+          } catch (err) {
+            console.warn('Failed to decrypt group key:', err instanceof Error ? err.message : err);
           }
         }
       } catch (err: unknown) {
@@ -122,6 +122,8 @@ const useAuthStore = create<AuthState>((set, get) => {
         const { publicKey, secretKey } = generateKeyPair();
 
         const data = await apiRequest<{
+          accessToken: string;
+          refreshToken: string;
           user: User;
           encryptedGroupKey: string | null;
         }>('/api/auth/register', {
@@ -141,8 +143,8 @@ const useAuthStore = create<AuthState>((set, get) => {
           if (data.encryptedGroupKey) {
             await window.api.secureStorage.set('encrypted-group-key', data.encryptedGroupKey);
           }
-        } catch {
-          // safeStorage may not be available
+        } catch (err) {
+          console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
         }
 
         // Decrypt group key
@@ -151,31 +153,20 @@ const useAuthStore = create<AuthState>((set, get) => {
           groupKey = decryptGroupKey(data.encryptedGroupKey, publicKey, secretKey);
         }
 
-        // Auto-login after registration: get tokens
-        const loginData = await apiRequest<{
-          accessToken: string;
-          refreshToken: string;
-          user: User;
-          encryptedGroupKey: string | null;
-        }>('/api/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({ username, password }),
-        });
-
         set({
-          user: loginData.user,
-          accessToken: loginData.accessToken,
-          refreshToken: loginData.refreshToken,
+          user: data.user,
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
           groupKey,
           isLoading: false,
           error: null,
         });
 
         try {
-          await window.api.secureStorage.set('accessToken', loginData.accessToken);
-          await window.api.secureStorage.set('refreshToken', loginData.refreshToken);
-        } catch {
-          // safeStorage may not be available
+          await window.api.secureStorage.set('accessToken', data.accessToken);
+          await window.api.secureStorage.set('refreshToken', data.refreshToken);
+        } catch (err) {
+          console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
         }
       } catch (err: unknown) {
         const error = err as { code?: string; message?: string };
@@ -202,8 +193,8 @@ const useAuthStore = create<AuthState>((set, get) => {
             body: JSON.stringify({ refreshToken }),
           });
         }
-      } catch {
-        // Logout is best-effort — clear local state regardless
+      } catch (err) {
+        console.warn('Logout API call failed:', err instanceof Error ? err.message : err);
       }
 
       // Clear groupKey from memory but keep private key + encrypted group key in safeStorage
@@ -212,8 +203,8 @@ const useAuthStore = create<AuthState>((set, get) => {
       try {
         await window.api.secureStorage.delete('accessToken');
         await window.api.secureStorage.delete('refreshToken');
-      } catch {
-        // safeStorage may not be available
+      } catch (err) {
+        console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
       }
     },
 
@@ -234,8 +225,8 @@ const useAuthStore = create<AuthState>((set, get) => {
       try {
         await window.api.secureStorage.set('accessToken', data.accessToken);
         await window.api.secureStorage.set('refreshToken', data.refreshToken);
-      } catch {
-        // safeStorage may not be available
+      } catch (err) {
+        console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
       }
     },
 
@@ -288,17 +279,18 @@ const useAuthStore = create<AuthState>((set, get) => {
               const groupKey = decryptGroupKey(encryptedGroupKeyB64, publicKey, privateKey);
               set({ groupKey });
             }
-          } catch {
-            // Encryption keys not available — group key will be null
+          } catch (err) {
+            console.warn('Failed to restore group key:', err instanceof Error ? err.message : err);
           }
-        } catch {
+        } catch (err) {
+          console.warn('Session restore failed, clearing tokens:', err instanceof Error ? err.message : err);
           // Tokens are invalid, clear everything
           set({ user: null, accessToken: null, refreshToken: null, groupKey: null, isLoading: false });
           await window.api.secureStorage.delete('accessToken');
           await window.api.secureStorage.delete('refreshToken');
         }
-      } catch {
-        // safeStorage unavailable
+      } catch (err) {
+        console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
         set({ isLoading: false });
       }
     },

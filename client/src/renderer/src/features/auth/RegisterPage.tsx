@@ -10,11 +10,22 @@ export function RegisterPage(): React.ReactNode {
   const [password, setPassword] = useState('');
   const { register, isLoading, error, clearError } = useAuthStore();
 
-  const canSubmit = username.trim().length > 0 && password.length > 0 && !isLoading;
+  if (!token) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-bg-primary">
+        <div className="w-full max-w-sm rounded-lg bg-bg-secondary p-8 shadow-lg text-center">
+          <h1 className="mb-4 text-xl font-bold text-text-primary">Invalid Invite</h1>
+          <p className="text-text-muted">This invite link is missing or malformed. Ask the server owner for a new one.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const canSubmit = username.trim().length > 0 && password.length >= 8 && !isLoading;
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
-    if (!canSubmit || !token) return;
+    if (!canSubmit) return;
 
     clearError();
     await register(username, password, token);
@@ -49,6 +60,10 @@ export function RegisterPage(): React.ReactNode {
             placeholder="Choose a password"
             autoComplete="new-password"
           />
+
+          {password.length > 0 && password.length < 8 && (
+            <p className="text-sm text-text-muted">Password must be at least 8 characters.</p>
+          )}
 
           {error && (
             <p className="text-sm text-status-dnd">{error}</p>

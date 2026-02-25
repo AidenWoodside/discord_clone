@@ -42,6 +42,12 @@ describe('encryptionService', () => {
       expect(key).toBeInstanceOf(Uint8Array);
       expect(key.length).toBe(32);
     });
+
+    it('should return the exact key matching the env var', () => {
+      const key = getGroupKey();
+      const expected = sodium.from_base64(process.env.GROUP_ENCRYPTION_KEY!);
+      expect(sodium.to_base64(key)).toBe(sodium.to_base64(expected));
+    });
   });
 
   describe('encryptGroupKeyForUser + decrypt roundtrip', () => {

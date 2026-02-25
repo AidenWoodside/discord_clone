@@ -6,7 +6,7 @@ import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken
 import { validateInvite } from '../invites/inviteService.js';
 import { createSession, findSessionByTokenHash, deleteSession, cleanExpiredSessions } from './sessionService.js';
 import { getAuthenticatedUser } from './authMiddleware.js';
-import { encryptGroupKeyForUser, getGroupKey, initializeSodium } from '../../services/encryptionService.js';
+import { encryptGroupKeyForUser, getGroupKey, initializeSodium, deserializePublicKey } from '../../services/encryptionService.js';
 import { X25519_PUBLIC_KEY_BYTES } from 'discord-clone-shared';
 
 interface RegisterBody {
@@ -76,9 +76,7 @@ export default fp(async (fastify: FastifyInstance) => {
     let publicKeyBytes: Uint8Array | null = null;
     if (publicKey) {
       try {
-        const sodium = await import('libsodium-wrappers');
-        await sodium.default.ready;
-        publicKeyBytes = sodium.default.from_base64(publicKey);
+        publicKeyBytes = deserializePublicKey(publicKey);
       } catch {
         return reply.status(400).send({
           error: { code: 'INVALID_PUBLIC_KEY', message: 'Public key must be a valid base64-encoded string.' },
@@ -184,13 +182,20 @@ export default fp(async (fastify: FastifyInstance) => {
       });
     }
 
+    // Generate tokens for auto-login after registration
+    const tokenPayload = { userId: result.user.id, role: result.user.role, username: result.user.username };
+    const accessToken = generateAccessToken(tokenPayload);
+    const refreshToken = generateRefreshToken(tokenPayload);
+    createSession(fastify.db, result.user.id, refreshToken);
+
     return reply.status(201).send({
       data: {
+        accessToken,
+        refreshToken,
         user: {
           id: result.user.id,
           username: result.user.username,
           role: result.user.role,
-          createdAt: result.user.created_at.toISOString(),
         },
         encryptedGroupKey: result.user.encrypted_group_key ?? null,
       },

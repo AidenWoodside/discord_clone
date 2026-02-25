@@ -6,6 +6,20 @@ vi.mock('../services/voiceService', () => ({
   cleanupMedia: vi.fn(),
 }));
 
+vi.mock('../services/mediaService', () => ({
+  muteAudio: vi.fn(),
+  unmuteAudio: vi.fn(),
+  deafenAudio: vi.fn(),
+  undeafenAudio: vi.fn(),
+  getLocalStream: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock('../services/vadService', () => ({
+  stopLocalVAD: vi.fn(),
+  startLocalVAD: vi.fn(),
+  stopAllVAD: vi.fn(),
+}));
+
 vi.mock('../utils/soundPlayer', () => ({
   playConnectSound: vi.fn(),
   playDisconnectSound: vi.fn(),
@@ -13,6 +27,8 @@ vi.mock('../utils/soundPlayer', () => ({
 
 import { useVoiceStore } from './useVoiceStore';
 import * as voiceService from '../services/voiceService';
+import * as mediaService from '../services/mediaService';
+import * as vadService from '../services/vadService';
 import { playConnectSound, playDisconnectSound } from '../utils/soundPlayer';
 
 const mockJoin = vi.mocked(voiceService.joinVoiceChannel);
@@ -28,6 +44,7 @@ beforeEach(() => {
     channelParticipants: new Map(),
     isMuted: false,
     isDeafened: false,
+    speakingUsers: new Set<string>(),
   });
   vi.clearAllMocks();
 });
@@ -205,6 +222,21 @@ describe('useVoiceStore', () => {
       expect(participants).toEqual(['user-1', 'user-2']);
     });
 
+    it('clears speakingUsers on leave', async () => {
+      useVoiceStore.setState({
+        currentChannelId: 'voice-ch-1',
+        currentUserId: 'my-user-id',
+        connectionState: 'connected',
+        channelParticipants: new Map([['voice-ch-1', ['my-user-id']]]),
+        speakingUsers: new Set(['my-user-id', 'other-user']),
+      });
+      mockLeave.mockResolvedValueOnce(undefined);
+
+      await useVoiceStore.getState().leaveChannel();
+
+      expect(useVoiceStore.getState().speakingUsers.size).toBe(0);
+    });
+
     it('removes channel entry when self is the last participant', async () => {
       useVoiceStore.setState({
         currentChannelId: 'voice-ch-1',
@@ -268,6 +300,25 @@ describe('useVoiceStore', () => {
     });
   });
 
+  describe('setSpeaking', () => {
+    it('adds userId to speakingUsers when speaking', () => {
+      useVoiceStore.getState().setSpeaking('user-1', true);
+      expect(useVoiceStore.getState().speakingUsers.has('user-1')).toBe(true);
+    });
+
+    it('removes userId from speakingUsers when not speaking', () => {
+      useVoiceStore.setState({ speakingUsers: new Set(['user-1']) });
+      useVoiceStore.getState().setSpeaking('user-1', false);
+      expect(useVoiceStore.getState().speakingUsers.has('user-1')).toBe(false);
+    });
+
+    it('handles multiple speaking users', () => {
+      useVoiceStore.getState().setSpeaking('user-1', true);
+      useVoiceStore.getState().setSpeaking('user-2', true);
+      expect(useVoiceStore.getState().speakingUsers.size).toBe(2);
+    });
+  });
+
   describe('toggleMute', () => {
     it('toggles isMuted flag', () => {
       expect(useVoiceStore.getState().isMuted).toBe(false);
@@ -275,6 +326,32 @@ describe('useVoiceStore', () => {
       expect(useVoiceStore.getState().isMuted).toBe(true);
       useVoiceStore.getState().toggleMute();
       expect(useVoiceStore.getState().isMuted).toBe(false);
+    });
+
+    it('calls mediaService.muteAudio when muting', () => {
+      useVoiceStore.getState().toggleMute();
+      expect(mediaService.muteAudio).toHaveBeenCalled();
+    });
+
+    it('calls mediaService.unmuteAudio when unmuting', () => {
+      useVoiceStore.setState({ isMuted: true });
+      useVoiceStore.getState().toggleMute();
+      expect(mediaService.unmuteAudio).toHaveBeenCalled();
+    });
+
+    it('stops local VAD when muting', () => {
+      useVoiceStore.getState().toggleMute();
+      expect(vadService.stopLocalVAD).toHaveBeenCalled();
+    });
+
+    it('clears self from speakingUsers when muting', () => {
+      useVoiceStore.setState({
+        currentUserId: 'my-user',
+        speakingUsers: new Set(['my-user', 'other-user']),
+      });
+      useVoiceStore.getState().toggleMute();
+      expect(useVoiceStore.getState().speakingUsers.has('my-user')).toBe(false);
+      expect(useVoiceStore.getState().speakingUsers.has('other-user')).toBe(true);
     });
   });
 
@@ -285,6 +362,39 @@ describe('useVoiceStore', () => {
       expect(useVoiceStore.getState().isDeafened).toBe(true);
       useVoiceStore.getState().toggleDeafen();
       expect(useVoiceStore.getState().isDeafened).toBe(false);
+    });
+
+    it('calls mediaService.deafenAudio when deafening', () => {
+      useVoiceStore.getState().toggleDeafen();
+      expect(mediaService.deafenAudio).toHaveBeenCalled();
+    });
+
+    it('calls mediaService.undeafenAudio when undeafening', () => {
+      useVoiceStore.setState({ isDeafened: true, isMuted: true });
+      useVoiceStore.getState().toggleDeafen();
+      expect(mediaService.undeafenAudio).toHaveBeenCalled();
+    });
+
+    it('sets isMuted to true when deafening', () => {
+      useVoiceStore.getState().toggleDeafen();
+      expect(useVoiceStore.getState().isMuted).toBe(true);
+    });
+
+    it('restores previous mute state when undeafening', () => {
+      // Start unmuted, then deafen, then undeafen
+      useVoiceStore.setState({ isMuted: false });
+      useVoiceStore.getState().toggleDeafen();
+      expect(useVoiceStore.getState().isMuted).toBe(true);
+      useVoiceStore.getState().toggleDeafen();
+      expect(useVoiceStore.getState().isMuted).toBe(false);
+    });
+
+    it('keeps muted state when was muted before deafen', () => {
+      useVoiceStore.setState({ isMuted: true });
+      useVoiceStore.getState().toggleDeafen();
+      expect(useVoiceStore.getState().isMuted).toBe(true);
+      useVoiceStore.getState().toggleDeafen();
+      expect(useVoiceStore.getState().isMuted).toBe(true);
     });
   });
 
@@ -332,6 +442,19 @@ describe('useVoiceStore', () => {
       expect(state.isDeafened).toBe(false);
       expect(voiceService.cleanupMedia).toHaveBeenCalled();
       expect(mockLeave).not.toHaveBeenCalled();
+    });
+
+    it('clears speakingUsers', () => {
+      useVoiceStore.setState({
+        currentChannelId: 'voice-ch-1',
+        currentUserId: 'my-user-id',
+        connectionState: 'connected',
+        speakingUsers: new Set(['user-1', 'user-2']),
+      });
+
+      useVoiceStore.getState().localCleanup();
+
+      expect(useVoiceStore.getState().speakingUsers.size).toBe(0);
     });
   });
 });

@@ -70,3 +70,12 @@ export async function apiRequest<T>(path: string, options?: RequestInit): Promis
 
   return body.data;
 }
+
+export const apiClient = {
+  get: <T>(path: string): Promise<T> => apiRequest<T>(path, { method: 'GET' }),
+  post: <T>(path: string, body?: unknown): Promise<T> =>
+    apiRequest<T>(path, {
+      method: 'POST',
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+};

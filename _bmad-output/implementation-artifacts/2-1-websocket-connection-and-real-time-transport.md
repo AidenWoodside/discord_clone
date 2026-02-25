@@ -1,6 +1,9 @@
+
+
+
 # Story 2.1: WebSocket Connection & Real-Time Transport
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -516,8 +519,6 @@ Claude Opus 4.6
 ### File List
 
 **New files:**
-- shared/src/ws-messages.ts (modified — added PresenceSyncPayload, PRESENCE_SYNC)
-- shared/src/index.ts (modified — export PresenceSyncPayload)
 - server/src/ws/wsServer.ts
 - server/src/ws/wsServer.test.ts
 - server/src/ws/wsRouter.ts
@@ -533,10 +534,15 @@ Claude Opus 4.6
 - server/drizzle/0002_next_blue_marvel.sql (generated migration)
 
 **Modified files:**
+- shared/src/ws-messages.ts (added PresenceSyncPayload, PRESENCE_SYNC)
+- shared/src/index.ts (export PresenceSyncPayload)
 - server/src/app.ts (registered wsServer plugin)
 - server/src/db/schema.ts (added messages table + Message/NewMessage types)
 - server/src/plugins/auth/authMiddleware.ts (added /ws to PUBLIC_ROUTES)
 - server/package.json (added @fastify/websocket, @types/ws)
+- package-lock.json (updated from @fastify/websocket install)
+- server/drizzle/meta/0002_snapshot.json (auto-generated migration metadata)
+- server/drizzle/meta/_journal.json (auto-generated migration journal)
 - client/src/renderer/src/features/layout/AppLayout.tsx (wsClient connect/disconnect on auth)
 - client/src/renderer/src/features/layout/ContentArea.tsx (added ConnectionBanner)
 - client/src/renderer/src/features/members/MemberList.tsx (use usePresenceStore for online/offline)
@@ -545,3 +551,4 @@ Claude Opus 4.6
 ## Change Log
 
 - 2026-02-24: Implemented story 2-1 — WebSocket connection with JWT auth, real-time presence tracking, reconnection with exponential backoff, connection state banner UI, messages table schema
+- 2026-02-24: Code review — 10 issues found (2 HIGH, 4 MEDIUM, 4 LOW), all fixed. Fixed messages table schema naming convention, AppLayout dead code in WS effect, broadcast try/catch, ConnectionBanner initial flash, wsRouter test cleanup, reduced motion ring, wsClient parse logging, MemberList act() wrapping, story File List documentation

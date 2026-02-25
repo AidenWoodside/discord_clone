@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
-import { routeMessage, registerHandler } from './wsRouter.js';
+import { routeMessage, registerHandler, clearHandlers } from './wsRouter.js';
 
 function createMockSocket() {
   return {
@@ -32,6 +32,7 @@ describe('wsRouter', () => {
   beforeEach(() => {
     ws = createMockSocket();
     log = createMockLogger();
+    clearHandlers();
   });
 
   describe('routeMessage', () => {

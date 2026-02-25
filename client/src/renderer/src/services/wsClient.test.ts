@@ -60,6 +60,7 @@ beforeEach(() => {
   usePresenceStore.setState({
     onlineUsers: new Map(),
     connectionState: 'disconnected',
+    hasConnectedOnce: false,
     isLoading: false,
     error: null,
   });

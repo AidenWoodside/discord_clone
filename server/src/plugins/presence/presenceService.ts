@@ -41,7 +41,11 @@ export function broadcastPresenceUpdate(
 
   for (const [clientUserId, ws] of clients) {
     if (clientUserId !== userId && ws.readyState === ws.OPEN) {
-      ws.send(data);
+      try {
+        ws.send(data);
+      } catch {
+        // Failed to send to this client — continue broadcasting to others
+      }
     }
   }
 }

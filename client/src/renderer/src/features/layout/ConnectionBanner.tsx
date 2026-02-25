@@ -5,6 +5,7 @@ type ConnectionState = 'connected' | 'connecting' | 'disconnected' | 'reconnecti
 
 export function ConnectionBanner(): React.ReactNode {
   const connectionState = usePresenceStore((s) => s.connectionState);
+  const hasConnectedOnce = usePresenceStore((s) => s.hasConnectedOnce);
   const previousStateRef = useRef<ConnectionState>(connectionState);
   const [showReconnected, setShowReconnected] = useState(false);
 
@@ -51,14 +52,14 @@ export function ConnectionBanner(): React.ReactNode {
       <div
         role="status"
         aria-live="assertive"
-        className="px-4 py-2 text-sm font-medium text-center bg-amber-600/90 text-white motion-safe:animate-pulse"
+        className="px-4 py-2 text-sm font-medium text-center bg-amber-600/90 text-white motion-safe:animate-pulse motion-reduce:ring-2 motion-reduce:ring-amber-400"
       >
         Trying to reconnect...
       </div>
     );
   }
 
-  if (connectionState === 'disconnected') {
+  if (connectionState === 'disconnected' && hasConnectedOnce) {
     return (
       <div
         role="alert"

@@ -5,6 +5,7 @@ beforeEach(() => {
   usePresenceStore.setState({
     onlineUsers: new Map(),
     connectionState: 'disconnected',
+    hasConnectedOnce: false,
     isLoading: false,
     error: null,
   });
@@ -83,6 +84,24 @@ describe('usePresenceStore', () => {
 
       usePresenceStore.getState().setConnectionState('disconnected');
       expect(usePresenceStore.getState().connectionState).toBe('disconnected');
+    });
+
+    it('should set hasConnectedOnce to true when connected', () => {
+      expect(usePresenceStore.getState().hasConnectedOnce).toBe(false);
+
+      usePresenceStore.getState().setConnectionState('connecting');
+      expect(usePresenceStore.getState().hasConnectedOnce).toBe(false);
+
+      usePresenceStore.getState().setConnectionState('connected');
+      expect(usePresenceStore.getState().hasConnectedOnce).toBe(true);
+    });
+
+    it('should keep hasConnectedOnce true after disconnect', () => {
+      usePresenceStore.getState().setConnectionState('connected');
+      expect(usePresenceStore.getState().hasConnectedOnce).toBe(true);
+
+      usePresenceStore.getState().setConnectionState('disconnected');
+      expect(usePresenceStore.getState().hasConnectedOnce).toBe(true);
     });
   });
 

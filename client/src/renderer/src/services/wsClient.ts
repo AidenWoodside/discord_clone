@@ -99,6 +99,7 @@ class WsClient {
     try {
       message = JSON.parse(raw) as WsMessage;
     } catch {
+      console.warn('[wsClient] Failed to parse incoming WebSocket message');
       return;
     }
 

@@ -7,6 +7,7 @@ beforeEach(() => {
   usePresenceStore.setState({
     onlineUsers: new Map(),
     connectionState: 'connected',
+    hasConnectedOnce: true,
     isLoading: false,
     error: null,
   });
@@ -39,11 +40,17 @@ describe('ConnectionBanner', () => {
     expect(screen.getByRole('status')).toHaveClass('motion-safe:animate-pulse');
   });
 
-  it('should show red banner when disconnected', () => {
-    usePresenceStore.setState({ connectionState: 'disconnected' });
+  it('should show red banner when disconnected after prior connection', () => {
+    usePresenceStore.setState({ connectionState: 'disconnected', hasConnectedOnce: true });
     render(<ConnectionBanner />);
     expect(screen.getByText(/Can't connect to server/)).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveClass('bg-red-600/90');
+  });
+
+  it('should not show red banner on initial load before first connection', () => {
+    usePresenceStore.setState({ connectionState: 'disconnected', hasConnectedOnce: false });
+    const { container } = render(<ConnectionBanner />);
+    expect(container.innerHTML).toBe('');
   });
 
   it('should show green banner briefly after reconnection', () => {

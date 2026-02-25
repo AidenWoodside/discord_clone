@@ -6,6 +6,7 @@ type ConnectionState = 'connected' | 'connecting' | 'disconnected' | 'reconnecti
 interface PresenceState {
   onlineUsers: Map<string, PresenceUpdatePayload>;
   connectionState: ConnectionState;
+  hasConnectedOnce: boolean;
   isLoading: boolean;
   error: string | null;
   setUserOnline: (userId: string) => void;
@@ -18,6 +19,7 @@ interface PresenceState {
 export const usePresenceStore = create<PresenceState>((set) => ({
   onlineUsers: new Map(),
   connectionState: 'disconnected',
+  hasConnectedOnce: false,
   isLoading: false,
   error: null,
 
@@ -44,7 +46,11 @@ export const usePresenceStore = create<PresenceState>((set) => ({
       return { onlineUsers: next };
     }),
 
-  setConnectionState: (connectionState: ConnectionState) => set({ connectionState }),
+  setConnectionState: (connectionState: ConnectionState) =>
+    set((state) => ({
+      connectionState,
+      hasConnectedOnce: state.hasConnectedOnce || connectionState === 'connected',
+    })),
 
   clearError: () => set({ error: null }),
 }));

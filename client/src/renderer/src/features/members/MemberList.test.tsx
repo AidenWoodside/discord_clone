@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { useMemberStore } from '../../stores/useMemberStore';
 import { usePresenceStore } from '../../stores/usePresenceStore';
 import { MemberList } from './MemberList';
@@ -29,6 +29,7 @@ beforeEach(() => {
   usePresenceStore.setState({
     onlineUsers: new Map([['u1', { userId: 'u1', status: 'online' }]]),
     connectionState: 'connected',
+    hasConnectedOnce: true,
     isLoading: false,
     error: null,
   });
@@ -69,11 +70,13 @@ describe('MemberList', () => {
     expect(screen.getByText(/ONLINE — 1/)).toBeInTheDocument();
 
     // Simulate second user coming online
-    usePresenceStore.setState({
-      onlineUsers: new Map([
-        ['u1', { userId: 'u1', status: 'online' }],
-        ['u2', { userId: 'u2', status: 'online' }],
-      ]),
+    act(() => {
+      usePresenceStore.setState({
+        onlineUsers: new Map([
+          ['u1', { userId: 'u1', status: 'online' }],
+          ['u2', { userId: 'u2', status: 'online' }],
+        ]),
+      });
     });
 
     rerender(<MemberList />);

@@ -37,13 +37,17 @@ export function AppLayout(): React.ReactNode {
       wsClient.disconnect();
       wsConnectedRef.current = false;
     }
+  }, [accessToken]);
+
+  // Disconnect WebSocket on unmount only
+  useEffect(() => {
     return () => {
       if (wsConnectedRef.current) {
         wsClient.disconnect();
         wsConnectedRef.current = false;
       }
     };
-  }, [accessToken]);
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {

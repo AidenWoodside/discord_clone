@@ -57,14 +57,14 @@ export const channels = sqliteTable('channels', {
 // --- Messages ---
 export const messages = sqliteTable('messages', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  channelId: text('channel_id').notNull().references(() => channels.id),
-  userId: text('user_id').notNull().references(() => users.id),
-  encryptedContent: text('encrypted_content').notNull(),
+  channel_id: text('channel_id').notNull().references(() => channels.id),
+  user_id: text('user_id').notNull().references(() => users.id),
+  encrypted_content: text('encrypted_content').notNull(),
   nonce: text('nonce').notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (table) => [
-  index('idx_messages_channel_id').on(table.channelId),
-  index('idx_messages_created_at').on(table.createdAt),
+  index('idx_messages_channel_id').on(table.channel_id),
+  index('idx_messages_created_at').on(table.created_at),
 ]);
 
 // --- Inferred Types ---

@@ -10,6 +10,10 @@ export function registerHandler(type: string, handler: WsHandler): void {
   handlers.set(type, handler);
 }
 
+export function clearHandlers(): void {
+  handlers.clear();
+}
+
 export function routeMessage(ws: WebSocket, raw: string, userId: string, log: FastifyBaseLogger): void {
   let parsed: unknown;
   try {

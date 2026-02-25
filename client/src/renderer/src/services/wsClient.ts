@@ -1,6 +1,8 @@
-import type { WsMessage, PresenceUpdatePayload, PresenceSyncPayload } from 'discord-clone-shared';
+import type { WsMessage, PresenceUpdatePayload, PresenceSyncPayload, MemberRemovedPayload } from 'discord-clone-shared';
 import { WS_TYPES, WS_RECONNECT_DELAY, WS_MAX_RECONNECT_DELAY } from 'discord-clone-shared';
 import { usePresenceStore } from '../stores/usePresenceStore';
+import { useMemberStore } from '../stores/useMemberStore';
+import { useAdminNotificationStore } from '../stores/useAdminNotificationStore';
 
 type MessageCallback = (payload: unknown) => void;
 
@@ -114,6 +116,13 @@ class WsClient {
     } else if (message.type === WS_TYPES.PRESENCE_SYNC) {
       const payload = message.payload as PresenceSyncPayload;
       usePresenceStore.getState().syncOnlineUsers(payload.users);
+    } else if (message.type === WS_TYPES.USER_KICKED) {
+      useAdminNotificationStore.getState().showKicked();
+    } else if (message.type === WS_TYPES.USER_BANNED) {
+      useAdminNotificationStore.getState().showBanned();
+    } else if (message.type === WS_TYPES.MEMBER_REMOVED) {
+      const payload = message.payload as MemberRemovedPayload;
+      useMemberStore.getState().removeMember(payload.userId);
     }
 
     // Dispatch to registered handlers

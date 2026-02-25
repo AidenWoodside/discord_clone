@@ -22,6 +22,9 @@ export type {
   VoiceStatePayload,
   PresenceUpdatePayload,
   PresenceSyncPayload,
+  UserKickedPayload,
+  UserBannedPayload,
+  MemberRemovedPayload,
 } from './ws-messages.js';
 
 export { WS_TYPES } from './ws-messages.js';

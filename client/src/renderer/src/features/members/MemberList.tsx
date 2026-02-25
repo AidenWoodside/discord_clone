@@ -3,6 +3,7 @@ import { useMemberStore } from '../../stores/useMemberStore';
 import { usePresenceStore } from '../../stores/usePresenceStore';
 import { ScrollArea } from '../../components';
 import { MemberItem } from './MemberItem';
+import { MemberContextMenu } from '../admin/MemberContextMenu';
 
 export function MemberList(): React.ReactNode {
   const members = useMemberStore((s) => s.members);
@@ -25,7 +26,9 @@ export function MemberList(): React.ReactNode {
               ONLINE — {onlineMembers.length}
             </h2>
             {onlineMembers.map((member) => (
-              <MemberItem key={member.id} member={member} isOnline={true} />
+              <MemberContextMenu key={member.id} userId={member.id} username={member.username}>
+                <MemberItem member={member} isOnline={true} />
+              </MemberContextMenu>
             ))}
           </div>
         )}
@@ -35,7 +38,9 @@ export function MemberList(): React.ReactNode {
               OFFLINE — {offlineMembers.length}
             </h2>
             {offlineMembers.map((member) => (
-              <MemberItem key={member.id} member={member} isOnline={false} />
+              <MemberContextMenu key={member.id} userId={member.id} username={member.username}>
+                <MemberItem member={member} isOnline={false} />
+              </MemberContextMenu>
             ))}
           </div>
         )}

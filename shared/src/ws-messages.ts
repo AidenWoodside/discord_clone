@@ -47,6 +47,19 @@ export interface PresenceSyncPayload {
   users: PresenceUpdatePayload[];
 }
 
+// Admin action payloads
+export interface UserKickedPayload {
+  userId: string;
+}
+
+export interface UserBannedPayload {
+  userId: string;
+}
+
+export interface MemberRemovedPayload {
+  userId: string;
+}
+
 // Type constants for namespace:action pattern
 export const WS_TYPES = {
   TEXT_SEND: 'text:send',
@@ -60,4 +73,7 @@ export const WS_TYPES = {
   PRESENCE_SYNC: 'presence:sync',
   CHANNEL_UPDATE: 'channel:update',
   USER_UPDATE: 'user:update',
+  USER_KICKED: 'user:kicked',
+  USER_BANNED: 'user:banned',
+  MEMBER_REMOVED: 'member:removed',
 } as const;

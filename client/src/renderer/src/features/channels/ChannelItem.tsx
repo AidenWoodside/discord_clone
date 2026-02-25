@@ -2,6 +2,7 @@ import React from 'react';
 import { Hash, Volume2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import type { ChannelListItem } from '../../stores/useChannelStore';
+import { useVoiceStore } from '../../stores/useVoiceStore';
 
 interface ChannelItemProps {
   channel: ChannelListItem;
@@ -10,13 +11,15 @@ interface ChannelItemProps {
 
 export function ChannelItem({ channel, isActive }: ChannelItemProps): React.ReactNode {
   const navigate = useNavigate();
+  const joinChannel = useVoiceStore((s) => s.joinChannel);
   const Icon = channel.type === 'text' ? Hash : Volume2;
 
   const handleClick = () => {
     if (channel.type === 'text') {
       navigate(`/app/channels/${channel.id}`);
+    } else {
+      joinChannel(channel.id);
     }
-    // Voice channels are no-op until Epic 3
   };
 
   return (

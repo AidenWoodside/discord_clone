@@ -1,9 +1,25 @@
-import type { WsMessage, PresenceUpdatePayload, PresenceSyncPayload, TextReceivePayload, ChannelCreatedPayload, ChannelDeletedPayload, MemberRemovedPayload } from 'discord-clone-shared';
+import type {
+  WsMessage,
+  PresenceUpdatePayload,
+  PresenceSyncPayload,
+  TextReceivePayload,
+  ChannelCreatedPayload,
+  ChannelDeletedPayload,
+  MemberRemovedPayload,
+  VoicePeerJoinedPayload,
+  VoicePeerLeftPayload,
+  VoiceNewProducerPayload,
+  VoiceProducerClosedPayload,
+  VoiceConsumeResponse,
+  VoiceChannelPresencePayload,
+} from 'discord-clone-shared';
 import { WS_TYPES, WS_RECONNECT_DELAY, WS_MAX_RECONNECT_DELAY } from 'discord-clone-shared';
 import { usePresenceStore } from '../stores/usePresenceStore';
 import { useChannelStore } from '../stores/useChannelStore';
 import { useMemberStore } from '../stores/useMemberStore';
 import { useAdminNotificationStore } from '../stores/useAdminNotificationStore';
+import { useVoiceStore } from '../stores/useVoiceStore';
+import * as mediaService from './mediaService';
 
 type MessageCallback = (payload: unknown) => void;
 type PendingRequest = {
@@ -42,6 +58,7 @@ class WsClient {
     this.socket.onclose = (event: CloseEvent) => {
       this.socket = null;
       this.markPendingMessagesFailed();
+      this.cleanupVoiceOnDisconnect();
 
       if (this.intentionalClose || event.code === 4001 || event.code === 4003) {
         usePresenceStore.getState().setConnectionState('disconnected');
@@ -130,6 +147,29 @@ class WsClient {
     }).catch((err) => {
       console.warn('[wsClient] Failed to mark pending messages as failed:', err);
     });
+  }
+
+  private async handleNewProducer(payload: VoiceNewProducerPayload): Promise<void> {
+    const recvTransport = mediaService.getRecvTransport();
+    if (!recvTransport) return;
+
+    try {
+      const consumeResponse = await this.request<VoiceConsumeResponse>(
+        'voice:consume',
+        { producerId: payload.producerId },
+      );
+
+      const consumer = await mediaService.consumeAudio(recvTransport, {
+        consumerId: consumeResponse.consumerId,
+        producerId: consumeResponse.producerId,
+        kind: consumeResponse.kind,
+        rtpParameters: consumeResponse.rtpParameters as Parameters<typeof mediaService.consumeAudio>[1]['rtpParameters'],
+      });
+
+      await this.request<void>('voice:consumer-resume', { consumerId: consumer.id });
+    } catch {
+      // Failed to consume — peer audio unavailable
+    }
   }
 
   private async handleTextReceive(message: WsMessage<TextReceivePayload>): Promise<void> {
@@ -232,6 +272,21 @@ class WsClient {
     } else if (message.type === WS_TYPES.MEMBER_REMOVED) {
       const payload = message.payload as MemberRemovedPayload;
       useMemberStore.getState().removeMember(payload.userId);
+    } else if (message.type === WS_TYPES.VOICE_PEER_JOINED) {
+      const payload = message.payload as VoicePeerJoinedPayload;
+      useVoiceStore.getState().addPeer(payload.channelId, payload.userId);
+    } else if (message.type === WS_TYPES.VOICE_PEER_LEFT) {
+      const payload = message.payload as VoicePeerLeftPayload;
+      useVoiceStore.getState().removePeer(payload.channelId, payload.userId);
+    } else if (message.type === WS_TYPES.VOICE_NEW_PRODUCER) {
+      const payload = message.payload as VoiceNewProducerPayload;
+      this.handleNewProducer(payload);
+    } else if (message.type === WS_TYPES.VOICE_PRODUCER_CLOSED) {
+      const payload = message.payload as VoiceProducerClosedPayload;
+      mediaService.removeConsumerByProducerId(payload.producerId);
+    } else if (message.type === WS_TYPES.VOICE_PRESENCE_SYNC) {
+      const payload = message.payload as VoiceChannelPresencePayload;
+      useVoiceStore.getState().syncParticipants(payload.participants);
     }
 
     // Dispatch to registered handlers
@@ -290,12 +345,16 @@ class WsClient {
         this.reconnectDelay = WS_RECONNECT_DELAY;
         usePresenceStore.getState().setConnectionState('connected');
 
+        // Request fresh voice presence after reconnect
+        this.requestVoicePresenceSync();
+
         ws.onmessage = (event: MessageEvent) => {
           this.handleMessage(event.data as string);
         };
 
         ws.onclose = (event: CloseEvent) => {
           this.socket = null;
+          this.cleanupVoiceOnDisconnect();
           if (this.intentionalClose || event.code === 4001) {
             usePresenceStore.getState().setConnectionState('disconnected');
             return;
@@ -312,6 +371,17 @@ class WsClient {
         this.scheduleReconnect();
       };
     }, this.reconnectDelay);
+  }
+
+  private cleanupVoiceOnDisconnect(): void {
+    // Local cleanup only — skip sending voice:leave since WS is already down
+    useVoiceStore.getState().localCleanup();
+  }
+
+  private requestVoicePresenceSync(): void {
+    this.request<void>('voice:presence-sync', {}).catch(() => {
+      // Server may not support presence-sync yet — non-critical
+    });
   }
 
   private clearReconnectTimer(): void {

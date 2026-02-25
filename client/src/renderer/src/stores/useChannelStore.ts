@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ApiList, Channel } from 'discord-clone-shared';
+import type { Channel } from 'discord-clone-shared';
 import { apiClient } from '../services/apiClient';
 
 interface ChannelState {
@@ -30,8 +30,7 @@ export const useChannelStore = create<ChannelState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const response = await apiClient.get<ApiList<Channel>>('/api/channels');
-      const channels = sortChannels(response.data);
+      const channels = sortChannels(await apiClient.get<Channel[]>('/api/channels'));
       const currentActive = get().activeChannelId;
       const hasCurrentActive = currentActive ? channels.some((channel) => channel.id === currentActive) : false;
       const firstTextChannel = channels.find((channel) => channel.type === 'text');

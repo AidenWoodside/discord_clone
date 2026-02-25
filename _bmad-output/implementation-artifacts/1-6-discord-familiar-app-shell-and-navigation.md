@@ -174,6 +174,14 @@ so that I can immediately orient myself and navigate the platform.
   - [ ] 16.7 Keyboard check: tab through sidebar channels, verify focus rings visible
   - [ ] 16.8 Verify semantic HTML: `<nav>`, `<main>`, `<aside>` in DOM inspector
 
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][HIGH] Fix API client/store contract mismatch: `apiRequest()` returns `body.data`, but channel/member stores treated the result as `{ data, count }`. Fixed by reading list payloads as `Channel[]` / `UserPublic[]`. [client/src/renderer/src/services/apiClient.ts:71, client/src/renderer/src/stores/useChannelStore.ts:33, client/src/renderer/src/stores/useMemberStore.ts:21]
+- [x] [AI-Review][HIGH] Add/adjust store tests to reflect real `apiClient` return shape so this regression cannot pass tests again. [client/src/renderer/src/stores/useChannelStore.test.ts:26, client/src/renderer/src/stores/useMemberStore.test.ts:25]
+- [ ] [AI-Review][MEDIUM] Story tasks 7.3/7.4/8.7/9.4 are marked complete with lucide-specific icon requirements, but implementation uses custom glyph/emoji icons and `lucide-react` is not installed. Either implement lucide icons or correct task completion claims/scope. [_bmad-output/implementation-artifacts/1-6-discord-familiar-app-shell-and-navigation.md:81, client/src/renderer/src/components/Icons.tsx:8]
+- [x] [AI-Review][MEDIUM] Task 14.7 claims tab order reaches member list items. Fixed by rendering member rows as keyboard-focusable `<button>` elements with focus-visible ring styles. [_bmad-output/implementation-artifacts/1-6-discord-familiar-app-shell-and-navigation.md:155, client/src/renderer/src/features/members/MemberItem.tsx:11]
+- [x] [AI-Review][MEDIUM] Git/story discrepancy for `package-lock.json` addressed by recording it in story File List. [git status --porcelain]
+
 ## Dev Notes
 
 ### Critical Architecture Patterns
@@ -645,7 +653,75 @@ GPT-5 Codex
 - client/src/renderer/src/features/members/MemberItem.tsx
 - client/src/renderer/src/features/members/MemberList.tsx
 - client/src/renderer/src/features/members/MemberList.test.tsx
+- package-lock.json
 
 ### Change Log
 
 - 2026-02-25: Implemented core Story 1.6 backend + frontend shell, stores, routing, and tests. Story left in `in-progress` pending dependency setup and final verification tasks.
+- 2026-02-25: Senior Developer Review (AI) completed. Outcome: Changes Requested. Added 5 follow-up items (1 High runtime defect, 1 High test-gap defect, 3 Medium documentation/accessibility/process issues).
+- 2026-02-25: PR update after review: fixed channel/member store API contract mismatch, aligned store tests to actual API client behavior, and made member list entries keyboard-focusable. `lucide-react` remains pending in this environment.
+
+## Senior Developer Review (AI)
+
+### Reviewer
+
+- Reviewer: dickweeds
+- Date: 2026-02-25
+- Outcome: Changes Requested
+
+### Scope Validated
+
+- Story file and acceptance criteria reviewed
+- Dev Agent Record and File List reviewed
+- All files in story File List reviewed
+- Git working tree compared against story File List
+- Planning/context artifacts loaded: architecture, UX spec, Epic 1, project context
+
+### Findings
+
+1. **[HIGH] Runtime data-shape mismatch breaks channel and member loading**
+   - `apiRequest()` returns `body.data` directly.
+   - Both stores expect `apiClient.get<ApiList<T>>()` and then read `response.data`, which is `undefined` at runtime for list endpoints.
+   - Result: `fetchChannels()`/`fetchMembers()` fall into error paths; ACs 1-4 become unreliable or fail.
+   - Evidence:
+     - `client/src/renderer/src/services/apiClient.ts:71`
+     - `client/src/renderer/src/stores/useChannelStore.ts:33`
+     - `client/src/renderer/src/stores/useMemberStore.ts:21`
+
+2. **[HIGH] Tests mask the production contract bug**
+   - Store tests mock `apiClient.get()` to return `{ data, count }`, matching store assumptions rather than real `apiRequest()` behavior.
+   - This allows a runtime-breaking regression to pass tests.
+   - Evidence:
+     - `client/src/renderer/src/stores/useChannelStore.test.ts:26`
+     - `client/src/renderer/src/stores/useMemberStore.test.ts:25`
+     - `client/src/renderer/src/services/apiClient.ts:71`
+
+3. **[MEDIUM] Completed task claims do not match icon implementation**
+   - Story marks lucide-specific subtasks complete, but code uses custom glyph/emoji icons.
+   - `lucide-react` is absent from dependency manifests in this workspace.
+   - Evidence:
+     - `_bmad-output/implementation-artifacts/1-6-discord-familiar-app-shell-and-navigation.md:81`
+     - `client/src/renderer/src/components/Icons.tsx:8`
+     - `client/package.json` / `package-lock.json` (no `lucide-react` match)
+
+4. **[MEDIUM] Accessibility task claim mismatch for keyboard tab order**
+   - Story marks task 14.7 complete for member-list tab reachability, but member rows are non-focusable `div` elements.
+   - Evidence:
+     - `_bmad-output/implementation-artifacts/1-6-discord-familiar-app-shell-and-navigation.md:155`
+     - `client/src/renderer/src/features/members/MemberItem.tsx:11`
+
+5. **[MEDIUM] Story documentation drift vs git working tree**
+   - `package-lock.json` is modified but not captured in story File List, reducing traceability.
+   - Evidence:
+     - `git status --porcelain` shows `M package-lock.json`
+
+### AC/Task Validation Summary
+
+- AC 1-4: **At risk / partially blocked** due to store/API contract bug.
+- AC 5-7: **Implemented in code structure**, but task 14.7 completion claim is inaccurate for member-item tab order.
+- Tasks marked `[x]` with mismatches found: icon-related subtasks and tab-order claim.
+
+### Sprint Sync
+
+- Story status: `in-progress` (retained; HIGH issues outstanding)
+- Sprint status sync: `1-6-discord-familiar-app-shell-and-navigation -> in-progress` (already in sync)

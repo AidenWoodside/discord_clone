@@ -23,13 +23,10 @@ describe('useChannelStore', () => {
   });
 
   it('fetchChannels populates channels and sets first text channel active', async () => {
-    getMock.mockResolvedValue({
-      data: [
-        { id: '2', name: 'Voice', type: 'voice', createdAt: new Date().toISOString() },
-        { id: '1', name: 'general', type: 'text', createdAt: new Date().toISOString() },
-      ],
-      count: 2,
-    });
+    getMock.mockResolvedValue([
+      { id: '2', name: 'Voice', type: 'voice', createdAt: new Date().toISOString() },
+      { id: '1', name: 'general', type: 'text', createdAt: new Date().toISOString() },
+    ]);
 
     await useChannelStore.getState().fetchChannels();
 

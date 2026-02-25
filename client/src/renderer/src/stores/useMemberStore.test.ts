@@ -22,10 +22,7 @@ describe('useMemberStore', () => {
   });
 
   it('fetchMembers populates state', async () => {
-    getMock.mockResolvedValue({
-      data: [{ id: '1', username: 'owner', role: 'owner', createdAt: new Date().toISOString() }],
-      count: 1,
-    });
+    getMock.mockResolvedValue([{ id: '1', username: 'owner', role: 'owner', createdAt: new Date().toISOString() }]);
 
     await useMemberStore.getState().fetchMembers();
 

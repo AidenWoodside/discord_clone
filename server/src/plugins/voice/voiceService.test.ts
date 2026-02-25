@@ -269,6 +269,14 @@ describe('voiceService', () => {
       expect(findProducerOwner('producer-abc')).toBe('user-1');
     });
 
+    it('returns userId of the peer who owns the video producer', () => {
+      joinVoiceChannel('user-1', 'channel-1', null);
+      const videoProducer = createMockProducer();
+      (videoProducer as unknown as { id: string }).id = 'video-producer-xyz';
+      setPeerVideoProducer('user-1', videoProducer);
+      expect(findProducerOwner('video-producer-xyz')).toBe('user-1');
+    });
+
     it('returns null for unknown producerId', () => {
       expect(findProducerOwner('nonexistent')).toBeNull();
     });

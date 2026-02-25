@@ -96,6 +96,7 @@ export interface VoiceNewProducerPayload {
 export interface VoiceProducerClosedPayload {
   producerId: string;
   peerId: string;
+  kind: 'audio' | 'video';
 }
 
 export interface VoicePeerJoinedPayload {

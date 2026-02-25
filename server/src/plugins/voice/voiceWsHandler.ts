@@ -204,6 +204,12 @@ function handleProduce(ws: WebSocket, message: WsMessage, userId: string): void 
     return;
   }
 
+  // Reject duplicate audio producer
+  if (kind === 'audio' && peer.producer) {
+    if (requestId) respondError(ws, requestId, 'Already has an active audio producer');
+    return;
+  }
+
   // Reject duplicate video producer
   if (kind === 'video' && peer.videoProducer) {
     if (requestId) respondError(ws, requestId, 'Already has an active video producer');
@@ -282,7 +288,7 @@ function handleConsume(ws: WebSocket, message: WsMessage, userId: string): void 
           try {
             clientWs.send(JSON.stringify({
               type: WS_TYPES.VOICE_PRODUCER_CLOSED,
-              payload: { producerId, peerId: producerPeerId },
+              payload: { producerId, peerId: producerPeerId, kind: consumer.kind },
             }));
           } catch {
             log.debug({ userId }, 'Failed to send producer-closed notification');

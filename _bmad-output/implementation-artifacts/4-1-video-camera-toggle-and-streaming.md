@@ -503,7 +503,7 @@ None — no blocking issues encountered.
 - Task 8: Enabled VoiceStatusBar video button with `toggleVideo()` click handler. Dynamic ARIA labels ("Turn on camera" / "Turn off camera"). Added Video/VideoOff icon toggle. Added Ctrl+Shift+V keyboard shortcut in AppLayout.
 - Tasks 9-10: All tests written inline with implementation (TDD). Server: 288 tests, Client: 276 tests — all passing.
 - Task 11: Lint clean. Shared + client builds pass. Server build has pre-existing TS errors unrelated to this story. Manual test items left for user verification.
-- Added `getSendTransport()` and `getSendTransport()` getters to mediaService for voiceService video wrapper functions.
+- Added `getSendTransport()` and `getRecvTransport()` getters to mediaService for voiceService video wrapper functions.
 - Added `startVideo()` and `stopVideo()` wrappers in voiceService to maintain the store → voiceService → mediaService abstraction pattern.
 - Added `removeVideoConsumerByProducerId()` and `getVideoConsumers()` to mediaService for video consumer cleanup.
 

@@ -424,6 +424,37 @@ describe('voiceWsHandler', () => {
       expect(broadcast.payload.kind).toBe('video');
     });
 
+    it('rejects duplicate audio producer', async () => {
+      joinVoiceChannel('user-1', 'voice-channel-1', null);
+      const mockTransport = createMockTransport('transport-send');
+      setPeerTransport('user-1', 'send', mockTransport as never);
+
+      // Produce audio first
+      const ws = createMockWs();
+      const handler = registeredHandlers.get(WS_TYPES.VOICE_PRODUCE)!;
+      handler(ws, {
+        type: WS_TYPES.VOICE_PRODUCE,
+        payload: { transportId: 'transport-send', kind: 'audio', rtpParameters: {} },
+        id: 'req-audio-1',
+      }, 'user-1');
+
+      await vi.waitFor(() => {
+        expect(ws.send).toHaveBeenCalled();
+      });
+
+      // Try to produce audio again
+      const ws2 = createMockWs();
+      handler(ws2, {
+        type: WS_TYPES.VOICE_PRODUCE,
+        payload: { transportId: 'transport-send', kind: 'audio', rtpParameters: {} },
+        id: 'req-dup-audio',
+      }, 'user-1');
+
+      const sent = JSON.parse(ws2.send.mock.calls[0][0]);
+      expect(sent.type).toBe('error');
+      expect(sent.payload.error).toContain('audio producer');
+    });
+
     it('rejects duplicate video producer', async () => {
       joinVoiceChannel('user-1', 'voice-channel-1', null);
       const mockTransport = createMockTransport('transport-send');

@@ -515,6 +515,24 @@ describe('useVoiceStore', () => {
       expect(voiceService.stopVideo).not.toHaveBeenCalled();
       expect(useVoiceStore.getState().isVideoEnabled).toBe(false);
     });
+
+    it('sets error and keeps video disabled when startVideo fails', async () => {
+      vi.mocked(voiceService.startVideo).mockRejectedValueOnce(new Error('Camera permission denied'));
+
+      useVoiceStore.setState({
+        currentChannelId: 'voice-ch-1',
+        currentUserId: 'my-user-id',
+        connectionState: 'connected',
+      });
+
+      await useVoiceStore.getState().toggleVideo();
+
+      const state = useVoiceStore.getState();
+      expect(state.isVideoEnabled).toBe(false);
+      expect(state.error).toBe('Camera permission denied');
+      expect(state.videoParticipants.has('my-user-id')).toBe(false);
+      expect(voiceService.stopVideo).not.toHaveBeenCalled();
+    });
   });
 
   describe('addVideoParticipant / removeVideoParticipant', () => {
@@ -560,6 +578,8 @@ describe('useVoiceStore', () => {
         channelParticipants: new Map([['voice-ch-1', ['u1']]]),
         isMuted: true,
         isDeafened: true,
+        isVideoEnabled: true,
+        videoParticipants: new Set(['my-user-id']),
       });
 
       useVoiceStore.getState().localCleanup();
@@ -571,6 +591,8 @@ describe('useVoiceStore', () => {
       expect(state.channelParticipants.size).toBe(0);
       expect(state.isMuted).toBe(false);
       expect(state.isDeafened).toBe(false);
+      expect(state.isVideoEnabled).toBe(false);
+      expect(state.videoParticipants.size).toBe(0);
       expect(voiceService.cleanupMedia).toHaveBeenCalled();
       expect(mockLeave).not.toHaveBeenCalled();
     });

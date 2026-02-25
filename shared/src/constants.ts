@@ -22,3 +22,11 @@ export const MAX_MEMBERS_PER_SERVER = 100;
 // Rate limiting
 export const RATE_LIMIT_MESSAGES_PER_MINUTE = 30;
 export const RATE_LIMIT_API_PER_MINUTE = 60;
+
+// Encryption (libsodium constants)
+export const NACL_SECRETBOX_KEY_BYTES = 32;
+export const NACL_SECRETBOX_NONCE_BYTES = 24;
+export const NACL_SECRETBOX_MAC_BYTES = 16;
+export const X25519_PUBLIC_KEY_BYTES = 32;
+export const X25519_SECRET_KEY_BYTES = 32;
+export const NACL_SEALEDBOX_OVERHEAD = 48;

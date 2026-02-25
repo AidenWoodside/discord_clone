@@ -9,6 +9,7 @@ export const users = sqliteTable('users', {
   password_hash: text('password_hash').notNull(),
   role: text('role', { enum: ['owner', 'user'] }).notNull().default('user'),
   public_key: text('public_key'),
+  encrypted_group_key: text('encrypted_group_key'),
   created_at: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });
 

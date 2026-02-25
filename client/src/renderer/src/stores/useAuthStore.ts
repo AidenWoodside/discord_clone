@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { apiRequest, configureApiClient } from '../services/apiClient';
+import { initializeSodium, generateKeyPair, decryptGroupKey, serializeKey, deserializeKey } from '../services/encryptionService';
 
 interface User {
   id: string;
@@ -11,9 +12,11 @@ interface AuthState {
   user: User | null;
   accessToken: string | null;
   refreshToken: string | null;
+  groupKey: Uint8Array | null;
   isLoading: boolean;
   error: string | null;
   login: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string, inviteToken: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshTokens: () => Promise<void>;
   restoreSession: () => Promise<void>;
@@ -30,17 +33,17 @@ const useAuthStore = create<AuthState>((set, get) => {
       try {
         await window.api.secureStorage.set('accessToken', accessToken);
         await window.api.secureStorage.set('refreshToken', refreshToken);
-      } catch {
-        // safeStorage may not be available in all environments
+      } catch (err) {
+        console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
       }
     },
     onSessionExpired: async () => {
-      set({ user: null, accessToken: null, refreshToken: null, error: null });
+      set({ user: null, accessToken: null, refreshToken: null, groupKey: null, error: null });
       try {
         await window.api.secureStorage.delete('accessToken');
         await window.api.secureStorage.delete('refreshToken');
-      } catch {
-        // safeStorage may not be available
+      } catch (err) {
+        console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
       }
     },
   });
@@ -49,6 +52,7 @@ const useAuthStore = create<AuthState>((set, get) => {
     user: null,
     accessToken: null,
     refreshToken: null,
+    groupKey: null,
     isLoading: true,
     error: null,
 
@@ -59,6 +63,7 @@ const useAuthStore = create<AuthState>((set, get) => {
           accessToken: string;
           refreshToken: string;
           user: User;
+          encryptedGroupKey: string | null;
         }>('/api/auth/login', {
           method: 'POST',
           body: JSON.stringify({ username, password }),
@@ -76,8 +81,27 @@ const useAuthStore = create<AuthState>((set, get) => {
         try {
           await window.api.secureStorage.set('accessToken', data.accessToken);
           await window.api.secureStorage.set('refreshToken', data.refreshToken);
-        } catch {
-          // safeStorage may not be available
+        } catch (err) {
+          console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
+        }
+
+        // Decrypt group key if available
+        if (data.encryptedGroupKey) {
+          try {
+            await initializeSodium();
+            const privateKeyB64 = await window.api.secureStorage.get('private-key');
+            const publicKeyB64 = await window.api.secureStorage.get('public-key');
+            if (privateKeyB64 && publicKeyB64) {
+              const privateKey = deserializeKey(privateKeyB64);
+              const publicKey = deserializeKey(publicKeyB64);
+              const groupKey = decryptGroupKey(data.encryptedGroupKey, publicKey, privateKey);
+              set({ groupKey });
+            }
+            // Store encrypted group key for session restoration
+            await window.api.secureStorage.set('encrypted-group-key', data.encryptedGroupKey);
+          } catch (err) {
+            console.warn('Failed to decrypt group key:', err instanceof Error ? err.message : err);
+          }
         }
       } catch (err: unknown) {
         const error = err as { code?: string; message?: string };
@@ -86,6 +110,73 @@ const useAuthStore = create<AuthState>((set, get) => {
           message = 'Invalid username or password.';
         } else if (error.code === 'ACCOUNT_BANNED') {
           message = 'Your account has been banned.';
+        }
+        set({ isLoading: false, error: message });
+      }
+    },
+
+    register: async (username: string, password: string, inviteToken: string) => {
+      set({ isLoading: true, error: null });
+      try {
+        await initializeSodium();
+        const { publicKey, secretKey } = generateKeyPair();
+
+        const data = await apiRequest<{
+          accessToken: string;
+          refreshToken: string;
+          user: User;
+          encryptedGroupKey: string | null;
+        }>('/api/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({
+            username,
+            password,
+            inviteToken,
+            publicKey: serializeKey(publicKey),
+          }),
+        });
+
+        // Store keys in safeStorage
+        try {
+          await window.api.secureStorage.set('private-key', serializeKey(secretKey));
+          await window.api.secureStorage.set('public-key', serializeKey(publicKey));
+          if (data.encryptedGroupKey) {
+            await window.api.secureStorage.set('encrypted-group-key', data.encryptedGroupKey);
+          }
+        } catch (err) {
+          console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
+        }
+
+        // Decrypt group key
+        let groupKey: Uint8Array | null = null;
+        if (data.encryptedGroupKey) {
+          groupKey = decryptGroupKey(data.encryptedGroupKey, publicKey, secretKey);
+        }
+
+        set({
+          user: data.user,
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          groupKey,
+          isLoading: false,
+          error: null,
+        });
+
+        try {
+          await window.api.secureStorage.set('accessToken', data.accessToken);
+          await window.api.secureStorage.set('refreshToken', data.refreshToken);
+        } catch (err) {
+          console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
+        }
+      } catch (err: unknown) {
+        const error = err as { code?: string; message?: string };
+        let message = 'Registration failed. Please try again.';
+        if (error.code === 'INVALID_INVITE') {
+          message = 'This invite is no longer valid.';
+        } else if (error.code === 'USERNAME_TAKEN') {
+          message = 'That username is taken. Try another.';
+        } else if (error.code === 'INVALID_PUBLIC_KEY') {
+          message = 'Encryption setup failed. Please try again.';
         }
         set({ isLoading: false, error: message });
       }
@@ -102,17 +193,18 @@ const useAuthStore = create<AuthState>((set, get) => {
             body: JSON.stringify({ refreshToken }),
           });
         }
-      } catch {
-        // Logout is best-effort — clear local state regardless
+      } catch (err) {
+        console.warn('Logout API call failed:', err instanceof Error ? err.message : err);
       }
 
-      set({ user: null, accessToken: null, refreshToken: null, isLoading: false, error: null });
+      // Clear groupKey from memory but keep private key + encrypted group key in safeStorage
+      set({ user: null, accessToken: null, refreshToken: null, groupKey: null, isLoading: false, error: null });
 
       try {
         await window.api.secureStorage.delete('accessToken');
         await window.api.secureStorage.delete('refreshToken');
-      } catch {
-        // safeStorage may not be available
+      } catch (err) {
+        console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
       }
     },
 
@@ -133,8 +225,8 @@ const useAuthStore = create<AuthState>((set, get) => {
       try {
         await window.api.secureStorage.set('accessToken', data.accessToken);
         await window.api.secureStorage.set('refreshToken', data.refreshToken);
-      } catch {
-        // safeStorage may not be available
+      } catch (err) {
+        console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
       }
     },
 
@@ -174,14 +266,31 @@ const useAuthStore = create<AuthState>((set, get) => {
 
           await window.api.secureStorage.set('accessToken', data.accessToken);
           await window.api.secureStorage.set('refreshToken', data.refreshToken);
-        } catch {
+
+          // Restore group key from safeStorage
+          try {
+            await initializeSodium();
+            const privateKeyB64 = await window.api.secureStorage.get('private-key');
+            const publicKeyB64 = await window.api.secureStorage.get('public-key');
+            const encryptedGroupKeyB64 = await window.api.secureStorage.get('encrypted-group-key');
+            if (privateKeyB64 && publicKeyB64 && encryptedGroupKeyB64) {
+              const privateKey = deserializeKey(privateKeyB64);
+              const publicKey = deserializeKey(publicKeyB64);
+              const groupKey = decryptGroupKey(encryptedGroupKeyB64, publicKey, privateKey);
+              set({ groupKey });
+            }
+          } catch (err) {
+            console.warn('Failed to restore group key:', err instanceof Error ? err.message : err);
+          }
+        } catch (err) {
+          console.warn('Session restore failed, clearing tokens:', err instanceof Error ? err.message : err);
           // Tokens are invalid, clear everything
-          set({ user: null, accessToken: null, refreshToken: null, isLoading: false });
+          set({ user: null, accessToken: null, refreshToken: null, groupKey: null, isLoading: false });
           await window.api.secureStorage.delete('accessToken');
           await window.api.secureStorage.delete('refreshToken');
         }
-      } catch {
-        // safeStorage unavailable
+      } catch (err) {
+        console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
         set({ isLoading: false });
       }
     },

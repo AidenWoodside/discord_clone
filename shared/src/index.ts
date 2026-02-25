@@ -9,6 +9,7 @@ export type {
   ApiList,
   ApiError,
   AuthTokens,
+  EncryptedGroupKeyBlob,
 } from './types.js';
 
 export type {
@@ -37,4 +38,10 @@ export {
   MAX_MEMBERS_PER_SERVER,
   RATE_LIMIT_MESSAGES_PER_MINUTE,
   RATE_LIMIT_API_PER_MINUTE,
+  NACL_SECRETBOX_KEY_BYTES,
+  NACL_SECRETBOX_NONCE_BYTES,
+  NACL_SECRETBOX_MAC_BYTES,
+  X25519_PUBLIC_KEY_BYTES,
+  X25519_SECRET_KEY_BYTES,
+  NACL_SEALEDBOX_OVERHEAD,
 } from './constants.js';

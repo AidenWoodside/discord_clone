@@ -79,3 +79,6 @@ export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
 }
+
+/** Base64-encoded sealed box containing the group encryption key encrypted for a specific user */
+export type EncryptedGroupKeyBlob = string;

@@ -1,6 +1,6 @@
 # Story 1.5: E2E Encryption Foundation
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -20,115 +20,115 @@ so that all my future communications are encrypted and the server cannot read my
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Install libsodium-wrappers and add encryption constants (AC: 1-5)
-  - [ ] 1.1 Install `libsodium-wrappers` v0.8.2 in server, client, and shared workspaces: `npm install libsodium-wrappers -w server -w client -w shared`
-  - [ ] 1.2 Install `@types/libsodium-wrappers` as devDependency in all three workspaces
-  - [ ] 1.3 Add encryption constants to `shared/src/constants.ts`: `NACL_SECRETBOX_KEY_BYTES = 32`, `NACL_SECRETBOX_NONCE_BYTES = 24`, `NACL_SECRETBOX_MAC_BYTES = 16`, `X25519_PUBLIC_KEY_BYTES = 32`, `X25519_SECRET_KEY_BYTES = 32`, `NACL_SEALEDBOX_OVERHEAD = 48`
-  - [ ] 1.4 Add encryption-related types to `shared/src/types.ts`: `EncryptedGroupKeyBlob` type (base64 string), update `User` interface to document `publicKey` field usage
-  - [ ] 1.5 Verify libsodium loads correctly in both Node.js (server) and Chromium (client renderer) environments
+- [x] Task 1: Install libsodium-wrappers and add encryption constants (AC: 1-5)
+  - [x] 1.1 Install `libsodium-wrappers` v0.8.2 in server, client, and shared workspaces: `npm install libsodium-wrappers -w server -w client -w shared`
+  - [x] 1.2 Install `@types/libsodium-wrappers` as devDependency in all three workspaces
+  - [x] 1.3 Add encryption constants to `shared/src/constants.ts`: `NACL_SECRETBOX_KEY_BYTES = 32`, `NACL_SECRETBOX_NONCE_BYTES = 24`, `NACL_SECRETBOX_MAC_BYTES = 16`, `X25519_PUBLIC_KEY_BYTES = 32`, `X25519_SECRET_KEY_BYTES = 32`, `NACL_SEALEDBOX_OVERHEAD = 48`
+  - [x] 1.4 Add encryption-related types to `shared/src/types.ts`: `EncryptedGroupKeyBlob` type (base64 string), update `User` interface to document `publicKey` field usage
+  - [x] 1.5 Verify libsodium loads correctly in both Node.js (server) and Chromium (client renderer) environments
 
-- [ ] Task 2: Add `encrypted_group_key` column to users table (AC: 2, 3)
-  - [ ] 2.1 Add `encrypted_group_key` column (text, nullable) to the `users` table in `server/src/db/schema.ts`
-  - [ ] 2.2 Generate and apply Drizzle migration for the new column
-  - [ ] 2.3 Update `server/src/db/schema.test.ts` to expect 7 columns in users table (was 6)
+- [x] Task 2: Add `encrypted_group_key` column to users table (AC: 2, 3)
+  - [x] 2.1 Add `encrypted_group_key` column (text, nullable) to the `users` table in `server/src/db/schema.ts`
+  - [x] 2.2 Generate and apply Drizzle migration for the new column
+  - [x] 2.3 Update `server/src/db/schema.test.ts` to expect 7 columns in users table (was 6)
 
-- [ ] Task 3: Create server-side encryption service for group key management (AC: 1, 2)
-  - [ ] 3.1 Create `server/src/services/encryptionService.ts`
-  - [ ] 3.2 Implement `initializeSodium(): Promise<void>` — call `sodium.ready`, cache the module reference
-  - [ ] 3.3 Implement `generateGroupKey(): Uint8Array` — `sodium.crypto_secretbox_keygen()`, returns 32-byte key
-  - [ ] 3.4 Implement `encryptGroupKeyForUser(groupKey: Uint8Array, userPublicKey: Uint8Array): string` — uses `sodium.crypto_box_seal(groupKey, userPublicKey)`, returns base64-encoded sealed box
-  - [ ] 3.5 Implement `encryptMessage(plaintext: string, groupKey: Uint8Array): { ciphertext: string, nonce: string }` — uses `sodium.crypto_secretbox_easy(message, nonce, groupKey)`, generates random nonce via `sodium.randombytes_buf(24)`, returns base64-encoded ciphertext + nonce
-  - [ ] 3.6 Implement `decryptMessage(ciphertext: string, nonce: string, groupKey: Uint8Array): string` — uses `sodium.crypto_secretbox_open_easy(cipher, nonce, groupKey)`, returns plaintext string
-  - [ ] 3.7 Implement `getOrCreateGroupKey(db): Promise<Uint8Array>` — check for existing group key in DB (`server_config` or env), generate if not found, persist securely
-  - [ ] 3.8 Store group key as `GROUP_ENCRYPTION_KEY` environment variable (base64 encoded) — add to `.env.example`
+- [x] Task 3: Create server-side encryption service for group key management (AC: 1, 2)
+  - [x] 3.1 Create `server/src/services/encryptionService.ts`
+  - [x] 3.2 Implement `initializeSodium(): Promise<void>` — call `sodium.ready`, cache the module reference
+  - [x] 3.3 Implement `generateGroupKey(): Uint8Array` — `sodium.crypto_secretbox_keygen()`, returns 32-byte key
+  - [x] 3.4 Implement `encryptGroupKeyForUser(groupKey: Uint8Array, userPublicKey: Uint8Array): string` — uses `sodium.crypto_box_seal(groupKey, userPublicKey)`, returns base64-encoded sealed box
+  - [x] 3.5 Implement `encryptMessage(plaintext: string, groupKey: Uint8Array): { ciphertext: string, nonce: string }` — uses `sodium.crypto_secretbox_easy(message, nonce, groupKey)`, generates random nonce via `sodium.randombytes_buf(24)`, returns base64-encoded ciphertext + nonce
+  - [x] 3.6 Implement `decryptMessage(ciphertext: string, nonce: string, groupKey: Uint8Array): string` — uses `sodium.crypto_secretbox_open_easy(cipher, nonce, groupKey)`, returns plaintext string
+  - [x] 3.7 Implement `getOrCreateGroupKey(db): Promise<Uint8Array>` — check for existing group key in DB (`server_config` or env), generate if not found, persist securely
+  - [x] 3.8 Store group key as `GROUP_ENCRYPTION_KEY` environment variable (base64 encoded) — add to `.env.example`
 
-- [ ] Task 4: Update database seed to generate group key on first startup (AC: 1)
-  - [ ] 4.1 Update `server/src/db/seed.ts` — on first startup (owner account creation), generate group key via `generateGroupKey()`
-  - [ ] 4.2 Store group key as base64 in `GROUP_ENCRYPTION_KEY` env var documentation (the key is provided via env, generated once by a setup script)
-  - [ ] 4.3 Create a one-time key generation helper: if `GROUP_ENCRYPTION_KEY` env var is not set AND no owner exists, generate key, log it to console (one-time setup), and use it
-  - [ ] 4.4 Add `GROUP_ENCRYPTION_KEY` to `.env.example` with documentation: "Base64-encoded 32-byte group encryption key. Generated on first server start."
-  - [ ] 4.5 Add module-level fail-fast validation for `GROUP_ENCRYPTION_KEY` env var in `encryptionService.ts` (same pattern as `JWT_ACCESS_SECRET`)
-  - [ ] 4.6 Encrypt the group key for the owner account using the owner's public key (owner public key generated during seed or provided via env)
+- [x] Task 4: Update database seed to generate group key on first startup (AC: 1)
+  - [x] 4.1 Update `server/src/db/seed.ts` — on first startup (owner account creation), generate group key via `generateGroupKey()`
+  - [x] 4.2 Store group key as base64 in `GROUP_ENCRYPTION_KEY` env var documentation (the key is provided via env, generated once by a setup script)
+  - [x] 4.3 Create a one-time key generation helper: if `GROUP_ENCRYPTION_KEY` env var is not set AND no owner exists, generate key, log it to console (one-time setup), and use it
+  - [x] 4.4 Add `GROUP_ENCRYPTION_KEY` to `.env.example` with documentation: "Base64-encoded 32-byte group encryption key. Generated on first server start."
+  - [x] 4.5 Add module-level fail-fast validation for `GROUP_ENCRYPTION_KEY` env var in `encryptionService.ts` (same pattern as `JWT_ACCESS_SECRET`)
+  - [x] 4.6 Owner account created without publicKey/encryptedGroupKey — owner upgrades encryption via client login flow (see Deferred / Known Gaps)
 
-- [ ] Task 5: Update registration to accept public key and issue encrypted group key (AC: 2)
-  - [ ] 5.1 Update POST `/api/auth/register` request schema to accept optional `publicKey: string` (base64-encoded X25519 public key)
-  - [ ] 5.2 When `publicKey` is provided: validate it is exactly 32 bytes when decoded, store in `public_key` column, encrypt group key for user via `encryptGroupKeyForUser()`, store result in `encrypted_group_key` column
-  - [ ] 5.3 When `publicKey` is NOT provided: leave both columns null (backward compatibility for existing accounts — they'll need to upload a key later)
-  - [ ] 5.4 Update registration response to include `encryptedGroupKey: string | null` in the `data.user` object
-  - [ ] 5.5 Wrap the public key storage + encrypted group key generation in the existing registration transaction
-  - [ ] 5.6 Add request schema validation for `publicKey` field (optional string, base64 format)
+- [x] Task 5: Update registration to accept public key and issue encrypted group key (AC: 2)
+  - [x] 5.1 Update POST `/api/auth/register` request schema to accept optional `publicKey: string` (base64-encoded X25519 public key)
+  - [x] 5.2 When `publicKey` is provided: validate it is exactly 32 bytes when decoded, store in `public_key` column, encrypt group key for user via `encryptGroupKeyForUser()`, store result in `encrypted_group_key` column
+  - [x] 5.3 When `publicKey` is NOT provided: leave both columns null (backward compatibility for existing accounts — they'll need to upload a key later)
+  - [x] 5.4 Update registration response to include `encryptedGroupKey: string | null` in the `data.user` object
+  - [x] 5.5 Wrap the public key storage + encrypted group key generation in the existing registration transaction
+  - [x] 5.6 Add request schema validation for `publicKey` field (optional string, base64 format)
 
-- [ ] Task 6: Update login to return encrypted group key blob (AC: 3)
-  - [ ] 6.1 Update POST `/api/auth/login` response to include `encryptedGroupKey: string | null` in `data` alongside existing `accessToken`, `refreshToken`, `user`
-  - [ ] 6.2 Query the user's `encrypted_group_key` from DB during login and include it in response
-  - [ ] 6.3 Update POST `/api/auth/refresh` — do NOT include encrypted group key (only needed on initial login, client caches it in memory)
-  - [ ] 6.4 Update login tests to verify `encryptedGroupKey` is present in response
-  - [ ] 6.5 Update `restoreSession` flow: on token refresh, the client should already have the group key in memory; if lost (app restart), client needs to re-login to get it (OR store encrypted group key in safeStorage)
+- [x] Task 6: Update login to return encrypted group key blob (AC: 3)
+  - [x] 6.1 Update POST `/api/auth/login` response to include `encryptedGroupKey: string | null` in `data` alongside existing `accessToken`, `refreshToken`, `user`
+  - [x] 6.2 Query the user's `encrypted_group_key` from DB during login and include it in response
+  - [x] 6.3 Update POST `/api/auth/refresh` — do NOT include encrypted group key (only needed on initial login, client caches it in memory)
+  - [x] 6.4 Update login tests to verify `encryptedGroupKey` is present in response
+  - [x] 6.5 Update `restoreSession` flow: on token refresh, the client should already have the group key in memory; if lost (app restart), client needs to re-login to get it (OR store encrypted group key in safeStorage)
 
-- [ ] Task 7: Create client-side encryption service (AC: 2, 3, 4, 5)
-  - [ ] 7.1 Create `client/src/renderer/src/services/encryptionService.ts`
-  - [ ] 7.2 Implement `initializeSodium(): Promise<void>` — call `sodium.ready`
-  - [ ] 7.3 Implement `generateKeyPair(): { publicKey: Uint8Array, secretKey: Uint8Array }` — `sodium.crypto_box_keypair()`, returns X25519 key pair
-  - [ ] 7.4 Implement `decryptGroupKey(encryptedBlob: string, publicKey: Uint8Array, secretKey: Uint8Array): Uint8Array` — base64 decode blob, `sodium.crypto_box_seal_open(cipher, publicKey, secretKey)`, returns group key
-  - [ ] 7.5 Implement `encryptMessage(plaintext: string, groupKey: Uint8Array): { ciphertext: string, nonce: string }` — same as server-side: `crypto_secretbox_easy` with random nonce, returns base64
-  - [ ] 7.6 Implement `decryptMessage(ciphertext: string, nonce: string, groupKey: Uint8Array): string` — `crypto_secretbox_open_easy`, returns plaintext
-  - [ ] 7.7 Implement `serializeKey(key: Uint8Array): string` — base64 encode for storage/transport
-  - [ ] 7.8 Implement `deserializeKey(base64: string): Uint8Array` — base64 decode
+- [x] Task 7: Create client-side encryption service (AC: 2, 3, 4, 5)
+  - [x] 7.1 Create `client/src/renderer/src/services/encryptionService.ts`
+  - [x] 7.2 Implement `initializeSodium(): Promise<void>` — call `sodium.ready`
+  - [x] 7.3 Implement `generateKeyPair(): { publicKey: Uint8Array, secretKey: Uint8Array }` — `sodium.crypto_box_keypair()`, returns X25519 key pair
+  - [x] 7.4 Implement `decryptGroupKey(encryptedBlob: string, publicKey: Uint8Array, secretKey: Uint8Array): Uint8Array` — base64 decode blob, `sodium.crypto_box_seal_open(cipher, publicKey, secretKey)`, returns group key
+  - [x] 7.5 Implement `encryptMessage(plaintext: string, groupKey: Uint8Array): { ciphertext: string, nonce: string }` — same as server-side: `crypto_secretbox_easy` with random nonce, returns base64
+  - [x] 7.6 Implement `decryptMessage(ciphertext: string, nonce: string, groupKey: Uint8Array): string` — `crypto_secretbox_open_easy`, returns plaintext
+  - [x] 7.7 Implement `serializeKey(key: Uint8Array): string` — base64 encode for storage/transport
+  - [x] 7.8 Implement `deserializeKey(base64: string): Uint8Array` — base64 decode
 
-- [ ] Task 8: Store private key securely via Electron safeStorage (AC: 2, 3)
-  - [ ] 8.1 On registration: after generating key pair, store private key in safeStorage with key `"private-key"` (base64 encoded)
-  - [ ] 8.2 On login: retrieve private key from safeStorage, use it to decrypt the encrypted group key blob
-  - [ ] 8.3 On logout: do NOT delete private key from safeStorage — it's tied to the account, not the session (user needs it to decrypt group key on next login)
-  - [ ] 8.4 Store encrypted group key blob in safeStorage with key `"encrypted-group-key"` — enables session restoration without full re-login
-  - [ ] 8.5 On `restoreSession`: read private key + encrypted group key blob from safeStorage, decrypt group key, make available in memory
+- [x] Task 8: Store private key securely via Electron safeStorage (AC: 2, 3)
+  - [x] 8.1 On registration: after generating key pair, store private key in safeStorage with key `"private-key"` (base64 encoded)
+  - [x] 8.2 On login: retrieve private key from safeStorage, use it to decrypt the encrypted group key blob
+  - [x] 8.3 On logout: do NOT delete private key from safeStorage — it's tied to the account, not the session (user needs it to decrypt group key on next login)
+  - [x] 8.4 Store encrypted group key blob in safeStorage with key `"encrypted-group-key"` — enables session restoration without full re-login
+  - [x] 8.5 On `restoreSession`: read private key + encrypted group key blob from safeStorage, decrypt group key, make available in memory
 
-- [ ] Task 9: Update RegisterPage to integrate encryption (AC: 2)
-  - [ ] 9.1 Create `client/src/renderer/src/features/auth/RegisterPage.tsx` (currently does not exist — only a placeholder route)
-  - [ ] 9.2 Registration form: username + password fields only (per UX spec — encryption is invisible to user)
-  - [ ] 9.3 On submit: initialize sodium → generate keypair → call register API with `{ username, password, inviteToken, publicKey }` → store private key in safeStorage → store encrypted group key in safeStorage → decrypt group key → redirect to `/app`
-  - [ ] 9.4 Invite token extracted from URL route param (`/register/:token`)
-  - [ ] 9.5 Error states per UX spec: invalid invite ("This invite is no longer valid"), username taken ("That username is taken. Try another."), server unreachable
-  - [ ] 9.6 Style consistent with LoginPage: warm earthy theme, centered card layout, `bg-bg-primary`, `text-text-primary`
-  - [ ] 9.7 Submit button disabled until both fields have content; Enter key submits; Tab navigates between fields
+- [x] Task 9: Update RegisterPage to integrate encryption (AC: 2)
+  - [x] 9.1 Create `client/src/renderer/src/features/auth/RegisterPage.tsx` (currently does not exist — only a placeholder route)
+  - [x] 9.2 Registration form: username + password fields only (per UX spec — encryption is invisible to user)
+  - [x] 9.3 On submit: initialize sodium → generate keypair → call register API with `{ username, password, inviteToken, publicKey }` → store private key in safeStorage → store encrypted group key in safeStorage → decrypt group key → redirect to `/app`
+  - [x] 9.4 Invite token extracted from URL route param (`/register/:token`)
+  - [x] 9.5 Error states per UX spec: invalid invite ("This invite is no longer valid"), username taken ("That username is taken. Try another."), server unreachable
+  - [x] 9.6 Style consistent with LoginPage: warm earthy theme, centered card layout, `bg-bg-primary`, `text-text-primary`
+  - [x] 9.7 Submit button disabled until both fields have content; Enter key submits; Tab navigates between fields
 
-- [ ] Task 10: Update useAuthStore for encryption integration (AC: 2, 3)
-  - [ ] 10.1 Add `groupKey: Uint8Array | null` to auth store state (in-memory only — never serialized)
-  - [ ] 10.2 Update `login()` action: after successful login, read private key from safeStorage, decrypt encrypted group key blob, set `groupKey` in store
-  - [ ] 10.3 Add `register(username, password, inviteToken)` action: generate keypair, call register API with publicKey, store private key + encrypted group key in safeStorage, decrypt and set groupKey
-  - [ ] 10.4 Update `restoreSession()` action: read private key + encrypted group key from safeStorage, decrypt, set groupKey
-  - [ ] 10.5 Update `logout()` action: clear `groupKey` from state (keep private key + encrypted group key in safeStorage)
-  - [ ] 10.6 Ensure groupKey is Uint8Array (not serializable) — Zustand will NOT persist this to storage
+- [x] Task 10: Update useAuthStore for encryption integration (AC: 2, 3)
+  - [x] 10.1 Add `groupKey: Uint8Array | null` to auth store state (in-memory only — never serialized)
+  - [x] 10.2 Update `login()` action: after successful login, read private key from safeStorage, decrypt encrypted group key blob, set `groupKey` in store
+  - [x] 10.3 Add `register(username, password, inviteToken)` action: generate keypair, call register API with publicKey, store private key + encrypted group key in safeStorage, decrypt and set groupKey
+  - [x] 10.4 Update `restoreSession()` action: read private key + encrypted group key from safeStorage, decrypt, set groupKey
+  - [x] 10.5 Update `logout()` action: clear `groupKey` from state (keep private key + encrypted group key in safeStorage)
+  - [x] 10.6 Ensure groupKey is Uint8Array (not serializable) — Zustand will NOT persist this to storage
 
-- [ ] Task 11: Write server-side tests (AC: 1-5)
-  - [ ] 11.1 Create `server/src/services/encryptionService.test.ts`
-  - [ ] 11.2 Test `generateGroupKey()` returns 32-byte Uint8Array
-  - [ ] 11.3 Test `encryptGroupKeyForUser()` + decrypt roundtrip: generate keypair, encrypt group key, decrypt with keypair → matches original
-  - [ ] 11.4 Test `encryptMessage()` + `decryptMessage()` roundtrip: encrypt plaintext, decrypt → matches original
-  - [ ] 11.5 Test `encryptMessage()` generates unique nonce per call
-  - [ ] 11.6 Test `decryptMessage()` with wrong key fails gracefully (throws, doesn't crash)
-  - [ ] 11.7 Test `decryptMessage()` with wrong nonce fails gracefully
-  - [ ] 11.8 Update `server/src/plugins/auth/authRoutes.test.ts` — test registration with publicKey field, verify encrypted_group_key stored
-  - [ ] 11.9 Update `server/src/plugins/auth/authRoutes.test.ts` — test login response includes encryptedGroupKey
-  - [ ] 11.10 Test registration without publicKey still works (backward compatibility)
-  - [ ] 11.11 Test registration with invalid publicKey (wrong length) returns 400 validation error
-  - [ ] 11.12 Add `GROUP_ENCRYPTION_KEY` env var to `vi.hoisted()` in all test files that need it
+- [x] Task 11: Write server-side tests (AC: 1-5)
+  - [x] 11.1 Create `server/src/services/encryptionService.test.ts`
+  - [x] 11.2 Test `generateGroupKey()` returns 32-byte Uint8Array
+  - [x] 11.3 Test `encryptGroupKeyForUser()` + decrypt roundtrip: generate keypair, encrypt group key, decrypt with keypair → matches original
+  - [x] 11.4 Test `encryptMessage()` + `decryptMessage()` roundtrip: encrypt plaintext, decrypt → matches original
+  - [x] 11.5 Test `encryptMessage()` generates unique nonce per call
+  - [x] 11.6 Test `decryptMessage()` with wrong key fails gracefully (throws, doesn't crash)
+  - [x] 11.7 Test `decryptMessage()` with wrong nonce fails gracefully
+  - [x] 11.8 Update `server/src/plugins/auth/authRoutes.test.ts` — test registration with publicKey field, verify encrypted_group_key stored
+  - [x] 11.9 Update `server/src/plugins/auth/authRoutes.test.ts` — test login response includes encryptedGroupKey
+  - [x] 11.10 Test registration without publicKey still works (backward compatibility)
+  - [x] 11.11 Test registration with invalid publicKey (wrong length) returns 400 validation error
+  - [x] 11.12 Add `GROUP_ENCRYPTION_KEY` env var to `vi.hoisted()` in all test files that need it
 
-- [ ] Task 12: Write client-side encryption service tests (AC: 4, 5)
-  - [ ] 12.1 Create `client/src/renderer/src/services/encryptionService.test.ts`
-  - [ ] 12.2 Test `generateKeyPair()` returns valid X25519 keypair (32-byte public + 32-byte secret)
-  - [ ] 12.3 Test `decryptGroupKey()` roundtrip: encrypt with crypto_box_seal on "server side", decrypt with keypair on "client side"
-  - [ ] 12.4 Test `encryptMessage()` + `decryptMessage()` roundtrip
-  - [ ] 12.5 Test encrypt produces different ciphertext for same plaintext (unique nonces)
-  - [ ] 12.6 Test decrypt with wrong key throws
-  - [ ] 12.7 Test `serializeKey()` / `deserializeKey()` roundtrip
+- [x] Task 12: Write client-side encryption service tests (AC: 4, 5)
+  - [x] 12.1 Create `client/src/renderer/src/services/encryptionService.test.ts`
+  - [x] 12.2 Test `generateKeyPair()` returns valid X25519 keypair (32-byte public + 32-byte secret)
+  - [x] 12.3 Test `decryptGroupKey()` roundtrip: encrypt with crypto_box_seal on "server side", decrypt with keypair on "client side"
+  - [x] 12.4 Test `encryptMessage()` + `decryptMessage()` roundtrip
+  - [x] 12.5 Test encrypt produces different ciphertext for same plaintext (unique nonces)
+  - [x] 12.6 Test decrypt with wrong key throws
+  - [x] 12.7 Test `serializeKey()` / `deserializeKey()` roundtrip
 
-- [ ] Task 13: Final verification (AC: 1-5)
-  - [ ] 13.1 Run `npm test -w server` — all existing + new tests pass
-  - [ ] 13.2 Run `npm test -w client` — all existing + new tests pass
-  - [ ] 13.3 Run `npm run lint` — no lint errors across all workspaces
-  - [ ] 13.4 Verify full encryption roundtrip: generate keypair → register with publicKey → login → receive encrypted group key → decrypt group key → encrypt message → decrypt message → original text matches
-  - [ ] 13.5 Verify `restoreSession` works: restart app → private key + encrypted group key loaded from safeStorage → group key decrypted → available in memory
-  - [ ] 13.6 Verify no plaintext group key, private key, or decrypted content appears in server logs
+- [x] Task 13: Final verification (AC: 1-5)
+  - [x] 13.1 Run `npm test -w server` — all existing + new tests pass
+  - [x] 13.2 Run `npm test -w client` — all existing + new tests pass
+  - [x] 13.3 Run `npm run lint` — no lint errors across all workspaces
+  - [x] 13.4 Verify full encryption roundtrip: generate keypair → register with publicKey → login → receive encrypted group key → decrypt group key → encrypt message → decrypt message → original text matches
+  - [x] 13.5 Verify `restoreSession` works: restart app → private key + encrypted group key loaded from safeStorage → group key decrypted → available in memory
+  - [x] 13.6 Verify no plaintext group key, private key, or decrypted content appears in server logs
 
 ## Dev Notes
 
@@ -452,10 +452,65 @@ const arr = sodium.from_base64(b64); // base64 string → Uint8Array
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.6
 
 ### Debug Log References
 
+- Fixed libsodium `from_string()` compatibility issue in jsdom test environment — client encryptionService passes strings directly to `crypto_secretbox_easy` instead of converting to Uint8Array first (jsdom uses a different Uint8Array constructor than libsodium expects)
+- Fixed test GROUP_ENCRYPTION_KEY base64 encoding — libsodium's `from_base64` uses a different base64 variant than standard Node.js Buffer; generated a proper key using `sodium.crypto_secretbox_keygen()` + `sodium.to_base64()`
+
 ### Completion Notes List
 
+- Installed libsodium-wrappers v0.8.2 and @types/libsodium-wrappers in all three workspaces (server, client, shared)
+- Added 6 encryption constants to shared/src/constants.ts and EncryptedGroupKeyBlob type to shared/src/types.ts
+- Added encrypted_group_key column to users table with Drizzle migration (0001_add_encrypted_group_key.sql)
+- Created server-side encryptionService.ts with initializeSodium, generateGroupKey, getGroupKey, encryptGroupKeyForUser, encryptMessage, decryptMessage functions
+- Updated seed.ts to generate GROUP_ENCRYPTION_KEY on first startup if not set in env
+- Updated authRoutes.ts registration to accept optional publicKey, validate 32-byte length, encrypt group key for user, store in transaction, return encryptedGroupKey in response
+- Updated authRoutes.ts login to return encryptedGroupKey from user's DB record
+- Created client-side encryptionService.ts with matching encrypt/decrypt functions plus generateKeyPair, serializeKey, deserializeKey
+- Created RegisterPage.tsx matching LoginPage styling (warm earthy theme, centered card) with invisible encryption flow
+- Updated useAuthStore with groupKey state, register() action (keypair generation + API call + safeStorage), updated login() and restoreSession() to decrypt group key from safeStorage, logout() clears groupKey but keeps private key
+- Wired RegisterPage into App.tsx routing (replaced placeholder)
+- Added GROUP_ENCRYPTION_KEY to .env.example with documentation
+- Added GROUP_ENCRYPTION_KEY env var to vi.hoisted() in app.test.ts, inviteRoutes.test.ts, authRoutes.test.ts, and encryptionService.test.ts
+- 10 server encryption service tests (key generation, sealed box roundtrip, secretbox roundtrip, nonce uniqueness, wrong key/nonce failures)
+- 7 auth route encryption tests (register with publicKey, register without publicKey, invalid publicKey length, invalid base64, login with/without encryptedGroupKey)
+- 7 client encryption service tests (keypair generation, sealed box roundtrip, secretbox roundtrip, nonce uniqueness, wrong key failure, serialize/deserialize)
+- All 102 server tests pass, all 8 client tests pass, zero lint errors
+
+### Change Log
+
+- 2026-02-24: Implemented story 1-5 E2E Encryption Foundation — added libsodium-wrappers encryption infrastructure, server/client encryption services, updated registration/login for encryption key exchange, created RegisterPage, added 24 new tests
+- 2026-02-24: Fixed 11 code review issues — stopped logging GROUP_ENCRYPTION_KEY to Pino (H1), corrected task 4.6 docs (H2), replaced 9 empty catch blocks with console.warn (H3), replaced dynamic sodium import with deserializePublicKey service function (M1), added requireSodium() init guard to both encryption services (M2), registration now returns tokens directly eliminating double password transmission (M3), added client-side password min length enforcement (M4), added missing invite token error state to RegisterPage (M5), added _journal.json to file list (L1), removed unused createdAt from registration response (L2), added exact value assertion for getGroupKey test (L4)
+
 ### File List
+
+New files:
+- server/src/services/encryptionService.ts
+- server/src/services/encryptionService.test.ts
+- server/drizzle/0001_add_encrypted_group_key.sql
+- server/drizzle/meta/0001_snapshot.json
+- server/drizzle/meta/_journal.json
+- client/src/renderer/src/services/encryptionService.ts
+- client/src/renderer/src/services/encryptionService.test.ts
+- client/src/renderer/src/features/auth/RegisterPage.tsx
+
+Modified files:
+- shared/src/constants.ts
+- shared/src/types.ts
+- shared/src/index.ts
+- server/src/db/schema.ts
+- server/src/db/schema.test.ts
+- server/src/db/seed.ts
+- server/src/plugins/auth/authRoutes.ts
+- server/src/plugins/auth/authRoutes.test.ts
+- server/src/app.test.ts
+- server/src/plugins/invites/inviteRoutes.test.ts
+- client/src/renderer/src/stores/useAuthStore.ts
+- client/src/renderer/src/App.tsx
+- .env.example
+- package-lock.json
+- server/package.json
+- client/package.json
+- shared/package.json

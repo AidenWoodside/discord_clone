@@ -1,4 +1,5 @@
 import Fastify, { FastifyInstance } from 'fastify';
+import cors from '@fastify/cors';
 import { sql } from 'drizzle-orm';
 import dbPlugin from './plugins/db.js';
 import authMiddleware from './plugins/auth/authMiddleware.js';
@@ -17,6 +18,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   // --- Infrastructure Plugins (register BEFORE domain plugins) ---
+  await app.register(cors, { origin: true, credentials: true });
   await app.register(dbPlugin);
 
   // --- Auth & Domain Plugins ---

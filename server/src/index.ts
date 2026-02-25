@@ -1,11 +1,30 @@
-import { buildApp } from './app.js';
-import { runMigrations } from './db/migrate.js';
-import { runSeed } from './db/seed.js';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
-const HOST = process.env.HOST || '0.0.0.0';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 async function start(): Promise<void> {
+  // Generate GROUP_ENCRYPTION_KEY before any modules read it
+  if (!process.env.GROUP_ENCRYPTION_KEY) {
+    const sodium = (await import('libsodium-wrappers')).default;
+    await sodium.ready;
+    const groupKey = sodium.crypto_secretbox_keygen();
+    const groupKeyBase64 = sodium.to_base64(groupKey);
+    process.env.GROUP_ENCRYPTION_KEY = groupKeyBase64;
+    process.stderr.write(`\n  GROUP_ENCRYPTION_KEY=${groupKeyBase64}\n`);
+    process.stderr.write('  Save this to your .env file. It will not be shown again.\n\n');
+  }
+
+  const { buildApp } = await import('./app.js');
+  const { runMigrations } = await import('./db/migrate.js');
+  const { runSeed } = await import('./db/seed.js');
+
+  const PORT = parseInt(process.env.PORT || '3000', 10);
+  const HOST = process.env.HOST || '0.0.0.0';
+
   const app = await buildApp();
 
   try {

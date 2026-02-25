@@ -6,11 +6,14 @@ import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken
 import { validateInvite } from '../invites/inviteService.js';
 import { createSession, findSessionByTokenHash, deleteSession, cleanExpiredSessions } from './sessionService.js';
 import { getAuthenticatedUser } from './authMiddleware.js';
+import { encryptGroupKeyForUser, getGroupKey, initializeSodium } from '../../services/encryptionService.js';
+import { X25519_PUBLIC_KEY_BYTES } from 'discord-clone-shared';
 
 interface RegisterBody {
   username: string;
   password: string;
   inviteToken: string;
+  publicKey?: string;
 }
 
 interface LoginBody {
@@ -39,6 +42,11 @@ export default fp(async (fastify: FastifyInstance) => {
     }
   });
 
+  // Initialize sodium on startup for encryption operations
+  fastify.addHook('onReady', async () => {
+    await initializeSodium();
+  });
+
   // POST /api/auth/register — PUBLIC
   fastify.post<{ Body: RegisterBody }>('/api/auth/register', {
     schema: {
@@ -49,18 +57,38 @@ export default fp(async (fastify: FastifyInstance) => {
           username: { type: 'string', minLength: 1, maxLength: 32 },
           password: { type: 'string', minLength: 8, maxLength: 72 },
           inviteToken: { type: 'string', minLength: 1 },
+          publicKey: { type: 'string' },
         },
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
-    const { username: rawUsername, password, inviteToken } = request.body;
+    const { username: rawUsername, password, inviteToken, publicKey } = request.body;
     const username = rawUsername.trim().toLowerCase();
 
     if (username.length === 0) {
       return reply.status(400).send({
         error: { code: 'INVALID_USERNAME', message: 'Username cannot be blank.' },
       });
+    }
+
+    // Validate publicKey length if provided
+    let publicKeyBytes: Uint8Array | null = null;
+    if (publicKey) {
+      try {
+        const sodium = await import('libsodium-wrappers');
+        await sodium.default.ready;
+        publicKeyBytes = sodium.default.from_base64(publicKey);
+      } catch {
+        return reply.status(400).send({
+          error: { code: 'INVALID_PUBLIC_KEY', message: 'Public key must be a valid base64-encoded string.' },
+        });
+      }
+      if (publicKeyBytes.length !== X25519_PUBLIC_KEY_BYTES) {
+        return reply.status(400).send({
+          error: { code: 'INVALID_PUBLIC_KEY', message: `Public key must be exactly ${X25519_PUBLIC_KEY_BYTES} bytes.` },
+        });
+      }
     }
 
     // 1. Validate invite token (using shared service — no duplicated logic)
@@ -77,9 +105,16 @@ export default fp(async (fastify: FastifyInstance) => {
     // 2. Hash password before entering transaction (async, yields event loop)
     const passwordHash = await hashPassword(password);
 
-    // 3. All DB mutations in a transaction for atomicity
+    // 3. Encrypt group key for user if publicKey was provided
+    let encryptedGroupKey: string | null = null;
+    if (publicKeyBytes) {
+      const groupKey = getGroupKey();
+      encryptedGroupKey = encryptGroupKeyForUser(groupKey, publicKeyBytes);
+    }
+
+    // 4. All DB mutations in a transaction for atomicity
     const result = fastify.db.transaction((tx) => {
-      // 3a. Check bans (lightweight username-based check)
+      // 4a. Check bans (lightweight username-based check)
       const bannedUser = tx
         .select({ userId: bans.user_id })
         .from(bans)
@@ -91,7 +126,7 @@ export default fp(async (fastify: FastifyInstance) => {
         return { error: 'REGISTRATION_BLOCKED' } as const;
       }
 
-      // 3b. Check username uniqueness (fast-path before INSERT)
+      // 4b. Check username uniqueness (fast-path before INSERT)
       const existingUser = tx
         .select()
         .from(users)
@@ -102,7 +137,7 @@ export default fp(async (fastify: FastifyInstance) => {
         return { error: 'USERNAME_TAKEN' } as const;
       }
 
-      // 3c. Insert user
+      // 4c. Insert user with publicKey and encryptedGroupKey
       try {
         const newUser = tx
           .insert(users)
@@ -110,11 +145,13 @@ export default fp(async (fastify: FastifyInstance) => {
             username,
             password_hash: passwordHash,
             role: 'user',
+            public_key: publicKey ?? null,
+            encrypted_group_key: encryptedGroupKey,
           })
           .returning()
           .get();
 
-        // 3d. Revoke invite token (single-use)
+        // 4d. Revoke invite token (single-use)
         tx.update(invites)
           .set({ revoked: true })
           .where(eq(invites.token, inviteToken))
@@ -155,6 +192,7 @@ export default fp(async (fastify: FastifyInstance) => {
           role: result.user.role,
           createdAt: result.user.created_at.toISOString(),
         },
+        encryptedGroupKey: result.user.encrypted_group_key ?? null,
       },
     });
   });
@@ -227,6 +265,7 @@ export default fp(async (fastify: FastifyInstance) => {
           username: user.username,
           role: user.role,
         },
+        encryptedGroupKey: user.encrypted_group_key ?? null,
       },
     });
   });

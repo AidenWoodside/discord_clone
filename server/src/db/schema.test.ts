@@ -25,8 +25,9 @@ describe('Database Schema', () => {
       expect(columnNames).toContain('password_hash');
       expect(columnNames).toContain('role');
       expect(columnNames).toContain('public_key');
+      expect(columnNames).toContain('encrypted_group_key');
       expect(columnNames).toContain('created_at');
-      expect(columnNames).toHaveLength(6);
+      expect(columnNames).toHaveLength(7);
     });
   });
 

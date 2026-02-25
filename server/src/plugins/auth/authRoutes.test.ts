@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 vi.hoisted(() => {
   process.env.JWT_ACCESS_SECRET = 'test-secret-key-for-testing';
   process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-key-for-testing';
+  process.env.GROUP_ENCRYPTION_KEY = 'rSxlHxEjeJC7RY079zu0Kg9fHWEIdAtGE4s76zAI9Rw';
 });
 vi.stubEnv('DATABASE_PATH', ':memory:');
 
@@ -11,6 +12,7 @@ import { setupApp, seedOwner, seedInvite } from '../../test/helpers.js';
 import { hashPassword, generateRefreshToken, hashToken } from './authService.js';
 import { users, bans, invites, sessions } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
+import sodium from 'libsodium-wrappers';
 
 async function loginUser(app: FastifyInstance, username: string, password: string) {
   const response = await app.inject({
@@ -243,6 +245,112 @@ describe('authRoutes', () => {
 
       expect(response.statusCode).toBe(400);
     });
+
+    it('should register with publicKey and return encryptedGroupKey', async () => {
+      app = await setupApp();
+      const { id: ownerId } = await seedOwner(app);
+      seedInvite(app, ownerId);
+
+      await sodium.ready;
+      const keypair = sodium.crypto_box_keypair();
+      const publicKeyB64 = sodium.to_base64(keypair.publicKey);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'jordan',
+          password: 'password123',
+          inviteToken: 'valid-invite-token',
+          publicKey: publicKeyB64,
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.data.user.username).toBe('jordan');
+      expect(body.data.encryptedGroupKey).toBeDefined();
+      expect(typeof body.data.encryptedGroupKey).toBe('string');
+
+      // Verify the encrypted group key can be decrypted
+      const sealed = sodium.from_base64(body.data.encryptedGroupKey);
+      const decrypted = sodium.crypto_box_seal_open(sealed, keypair.publicKey, keypair.privateKey);
+      const expectedGroupKey = sodium.from_base64(process.env.GROUP_ENCRYPTION_KEY!);
+      expect(sodium.to_base64(decrypted)).toBe(sodium.to_base64(expectedGroupKey));
+
+      // Verify DB has both columns stored
+      const user = app.db.select().from(users).where(eq(users.username, 'jordan')).get();
+      expect(user!.public_key).toBe(publicKeyB64);
+      expect(user!.encrypted_group_key).toBe(body.data.encryptedGroupKey);
+    });
+
+    it('should register without publicKey (backward compatibility)', async () => {
+      app = await setupApp();
+      const { id: ownerId } = await seedOwner(app);
+      seedInvite(app, ownerId);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'jordan',
+          password: 'password123',
+          inviteToken: 'valid-invite-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.data.encryptedGroupKey).toBeNull();
+
+      const user = app.db.select().from(users).where(eq(users.username, 'jordan')).get();
+      expect(user!.public_key).toBeNull();
+      expect(user!.encrypted_group_key).toBeNull();
+    });
+
+    it('should return 400 for invalid publicKey (wrong length)', async () => {
+      app = await setupApp();
+      const { id: ownerId } = await seedOwner(app);
+      seedInvite(app, ownerId);
+
+      await sodium.ready;
+      // 16 bytes instead of 32
+      const shortKey = sodium.to_base64(sodium.randombytes_buf(16));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'jordan',
+          password: 'password123',
+          inviteToken: 'valid-invite-token',
+          publicKey: shortKey,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe('INVALID_PUBLIC_KEY');
+    });
+
+    it('should return 400 for invalid publicKey (not base64)', async () => {
+      app = await setupApp();
+      const { id: ownerId } = await seedOwner(app);
+      seedInvite(app, ownerId);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'jordan',
+          password: 'password123',
+          inviteToken: 'valid-invite-token',
+          publicKey: 'not-valid-base64!!!@@@',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe('INVALID_PUBLIC_KEY');
+    });
   });
 
   describe('POST /api/auth/login', () => {
@@ -358,6 +466,54 @@ describe('authRoutes', () => {
         .where(eq(sessions.refresh_token_hash, tokenHash)).get();
       expect(session).toBeDefined();
       expect(session!.user_id).toBe(loginData.user.id);
+    });
+
+    it('should return encryptedGroupKey in login response when user has one', async () => {
+      app = await setupApp();
+      const { id: ownerId } = await seedOwner(app);
+      seedInvite(app, ownerId);
+
+      await sodium.ready;
+      const keypair = sodium.crypto_box_keypair();
+      const publicKeyB64 = sodium.to_base64(keypair.publicKey);
+
+      // Register with publicKey
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'jordan',
+          password: 'password123',
+          inviteToken: 'valid-invite-token',
+          publicKey: publicKeyB64,
+        },
+      });
+
+      // Login
+      const loginResponse = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { username: 'jordan', password: 'password123' },
+      });
+
+      expect(loginResponse.statusCode).toBe(200);
+      const body = loginResponse.json();
+      expect(body.data.encryptedGroupKey).toBeDefined();
+      expect(typeof body.data.encryptedGroupKey).toBe('string');
+    });
+
+    it('should return null encryptedGroupKey when user has no encryption setup', async () => {
+      app = await setupApp();
+      await seedOwner(app);
+
+      const loginResponse = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { username: 'owner', password: 'ownerPass123' },
+      });
+
+      expect(loginResponse.statusCode).toBe(200);
+      expect(loginResponse.json().data.encryptedGroupKey).toBeNull();
     });
   });
 

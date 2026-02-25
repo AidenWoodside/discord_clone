@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import sodium from 'libsodium-wrappers';
 import { users, channels } from './schema.js';
 import { hashPassword } from '../plugins/auth/authService.js';
 import type { AppDatabase } from './connection.js';
@@ -20,9 +21,19 @@ export async function runSeed(db: AppDatabase, logger?: { info: (msg: string) =>
     return;
   }
 
+  // Generate GROUP_ENCRYPTION_KEY if not already set
+  if (!process.env.GROUP_ENCRYPTION_KEY) {
+    await sodium.ready;
+    const groupKey = sodium.crypto_secretbox_keygen();
+    const groupKeyBase64 = sodium.to_base64(groupKey);
+    process.env.GROUP_ENCRYPTION_KEY = groupKeyBase64;
+    log.info(`Generated GROUP_ENCRYPTION_KEY — save this to your .env file: ${groupKeyBase64}`);
+  }
+
   const passwordHash = await hashPassword(ownerPassword);
 
   db.transaction((tx) => {
+    // Owner created without publicKey — encryption is set up when owner registers a keypair via the client
     tx.insert(users).values({
       username: ownerUsername,
       password_hash: passwordHash,

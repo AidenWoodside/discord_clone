@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router';
 import { Tooltip as RadixTooltip } from 'radix-ui';
 import { LoginPage } from './features/auth/LoginPage';
+import { RegisterPage } from './features/auth/RegisterPage';
 import { AuthGuard } from './features/auth/AuthGuard';
 import useAuthStore from './stores/useAuthStore';
 
@@ -25,7 +26,7 @@ function App(): React.ReactNode {
       <HashRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/register/:token" element={<div className="flex h-screen items-center justify-center bg-bg-primary"><p className="text-text-primary">Registration coming soon.</p></div>} />
+          <Route path="/register/:token" element={<RegisterPage />} />
           <Route path="/app" element={<AuthGuard />}>
             <Route index element={<MainApp />} />
           </Route>

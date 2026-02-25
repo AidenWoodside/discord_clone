@@ -21,6 +21,7 @@ export type {
   VoiceLeavePayload,
   VoiceStatePayload,
   PresenceUpdatePayload,
+  PresenceSyncPayload,
 } from './ws-messages.js';
 
 export { WS_TYPES } from './ws-messages.js';

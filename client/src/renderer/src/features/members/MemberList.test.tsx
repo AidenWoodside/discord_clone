@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import useAuthStore from '../../stores/useAuthStore';
 import { useMemberStore } from '../../stores/useMemberStore';
+import { usePresenceStore } from '../../stores/usePresenceStore';
 import { MemberList } from './MemberList';
 
 beforeAll(() => {
@@ -21,16 +21,14 @@ const mockMembers = [
 ];
 
 beforeEach(() => {
-  useAuthStore.setState({
-    user: { id: 'u1', username: 'currentuser', role: 'owner' },
-    accessToken: 'test-token',
-    refreshToken: 'test-refresh',
-    groupKey: null,
+  useMemberStore.setState({
+    members: mockMembers,
     isLoading: false,
     error: null,
   });
-  useMemberStore.setState({
-    members: mockMembers,
+  usePresenceStore.setState({
+    onlineUsers: new Map([['u1', { userId: 'u1', status: 'online' }]]),
+    connectionState: 'connected',
     isLoading: false,
     error: null,
   });
@@ -43,7 +41,7 @@ describe('MemberList', () => {
     expect(screen.getByText(/OFFLINE — 2/)).toBeInTheDocument();
   });
 
-  it('shows current user as online', () => {
+  it('shows online user from presence store', () => {
     render(<MemberList />);
     expect(screen.getByText('currentuser')).toBeInTheDocument();
   });
@@ -64,5 +62,22 @@ describe('MemberList', () => {
     const { container } = render(<MemberList />);
     const skeletons = container.querySelectorAll('.animate-pulse');
     expect(skeletons.length).toBeGreaterThan(0);
+  });
+
+  it('updates when presence changes', () => {
+    const { rerender } = render(<MemberList />);
+    expect(screen.getByText(/ONLINE — 1/)).toBeInTheDocument();
+
+    // Simulate second user coming online
+    usePresenceStore.setState({
+      onlineUsers: new Map([
+        ['u1', { userId: 'u1', status: 'online' }],
+        ['u2', { userId: 'u2', status: 'online' }],
+      ]),
+    });
+
+    rerender(<MemberList />);
+    expect(screen.getByText(/ONLINE — 2/)).toBeInTheDocument();
+    expect(screen.getByText(/OFFLINE — 1/)).toBeInTheDocument();
   });
 });

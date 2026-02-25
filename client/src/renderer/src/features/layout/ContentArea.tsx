@@ -3,6 +3,7 @@ import { useParams } from 'react-router';
 import { Hash, Users } from 'lucide-react';
 import { useChannelStore } from '../../stores/useChannelStore';
 import { useUIStore } from '../../stores/useUIStore';
+import { ConnectionBanner } from './ConnectionBanner';
 
 export function ContentArea(): React.ReactNode {
   const { channelId } = useParams<{ channelId: string }>();
@@ -23,6 +24,7 @@ export function ContentArea(): React.ReactNode {
     return (
       <>
         <ContentHeader channelName={null} isMemberListVisible={isMemberListVisible} onToggleMemberList={toggleMemberList} />
+        <ConnectionBanner />
         <div className="flex-1 flex items-center justify-center">
           <p className="text-text-muted text-lg">Select a channel</p>
         </div>
@@ -33,6 +35,7 @@ export function ContentArea(): React.ReactNode {
   return (
     <>
       <ContentHeader channelName={channel.name} isMemberListVisible={isMemberListVisible} onToggleMemberList={toggleMemberList} />
+      <ConnectionBanner />
       <div className="flex-1 overflow-y-auto flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-text-primary">Welcome to #{channel.name}</h2>

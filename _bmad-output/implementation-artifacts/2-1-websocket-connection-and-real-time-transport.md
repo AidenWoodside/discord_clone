@@ -1,6 +1,6 @@
 # Story 2.1: WebSocket Connection & Real-Time Transport
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -24,105 +24,105 @@ so that I can send and receive messages in real-time without page refreshes.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Install `@fastify/websocket` and configure server WebSocket support (AC: 1, 5)
-  - [ ] 1.1 Install `@fastify/websocket` in server workspace: `npm install @fastify/websocket -w server`
-  - [ ] 1.2 Create `server/src/ws/wsServer.ts` — Fastify plugin that registers `@fastify/websocket` and handles the `/ws` upgrade endpoint
-  - [ ] 1.3 Authenticate WebSocket connections: extract JWT from query param `?token=<accessToken>` during upgrade handshake, reject with close code 4001 if invalid/expired
-  - [ ] 1.4 Track connected clients: `Map<userId, WebSocket>` — add on connect, remove on close
-  - [ ] 1.5 Register wsServer plugin in `server/src/app.ts` (before domain plugins, after auth middleware)
+- [x] Task 1: Install `@fastify/websocket` and configure server WebSocket support (AC: 1, 5)
+  - [x] 1.1 Install `@fastify/websocket` in server workspace: `npm install @fastify/websocket -w server`
+  - [x] 1.2 Create `server/src/ws/wsServer.ts` — Fastify plugin that registers `@fastify/websocket` and handles the `/ws` upgrade endpoint
+  - [x]1.3 Authenticate WebSocket connections: extract JWT from query param `?token=<accessToken>` during upgrade handshake, reject with close code 4001 if invalid/expired
+  - [x]1.4 Track connected clients: `Map<userId, WebSocket>` — add on connect, remove on close
+  - [x]1.5 Register wsServer plugin in `server/src/app.ts` (before domain plugins, after auth middleware)
 
-- [ ] Task 2: Create server-side WebSocket message router (AC: 2, 5)
-  - [ ] 2.1 Create `server/src/ws/wsRouter.ts` — parses incoming JSON messages and routes by `type` field
-  - [ ] 2.2 Validate all incoming messages match `WsMessage` envelope: `{ type: string, payload: unknown, id?: string }` — close connection with code 4002 on malformed messages
-  - [ ] 2.3 Create type-safe handler registry: `Map<string, (ws, message, userId) => void>` for registering message type handlers
-  - [ ] 2.4 Add handler for `presence:update` — broadcast user online status to all connected clients on connect/disconnect
-  - [ ] 2.5 Log all WS connection events via Pino logger (connect, disconnect, errors — NEVER message content)
+- [x]Task 2: Create server-side WebSocket message router (AC: 2, 5)
+  - [x]2.1 Create `server/src/ws/wsRouter.ts` — parses incoming JSON messages and routes by `type` field
+  - [x]2.2 Validate all incoming messages match `WsMessage` envelope: `{ type: string, payload: unknown, id?: string }` — close connection with code 4002 on malformed messages
+  - [x]2.3 Create type-safe handler registry: `Map<string, (ws, message, userId) => void>` for registering message type handlers
+  - [x]2.4 Add handler for `presence:update` — broadcast user online status to all connected clients on connect/disconnect
+  - [x]2.5 Log all WS connection events via Pino logger (connect, disconnect, errors — NEVER message content)
 
-- [ ] Task 3: Create server-side presence tracking (AC: 2, 4)
-  - [ ] 3.1 Create `server/src/plugins/presence/presenceService.ts` — in-memory `Map<userId, { status, connectedAt }>` tracking online users
-  - [ ] 3.2 On WebSocket connect: add user to presence map, broadcast `presence:update` with `{ userId, status: 'online' }` to all connected clients
-  - [ ] 3.3 On WebSocket disconnect: remove from presence map, broadcast `presence:update` with `{ userId, status: 'offline' }` to all connected clients
-  - [ ] 3.4 Create `presence:sync` handler: when a new client connects, send the full online user list as a bulk `presence:sync` message so the joining client knows who's currently online
+- [x]Task 3: Create server-side presence tracking (AC: 2, 4)
+  - [x]3.1 Create `server/src/plugins/presence/presenceService.ts` — in-memory `Map<userId, { status, connectedAt }>` tracking online users
+  - [x]3.2 On WebSocket connect: add user to presence map, broadcast `presence:update` with `{ userId, status: 'online' }` to all connected clients
+  - [x]3.3 On WebSocket disconnect: remove from presence map, broadcast `presence:update` with `{ userId, status: 'offline' }` to all connected clients
+  - [x]3.4 Create `presence:sync` handler: when a new client connects, send the full online user list as a bulk `presence:sync` message so the joining client knows who's currently online
 
-- [ ] Task 4: Create client-side `wsClient` service (AC: 1, 2, 3, 5)
-  - [ ] 4.1 Create `client/src/renderer/src/services/wsClient.ts` — singleton WebSocket connection manager class
-  - [ ] 4.2 `connect(accessToken: string)` method: opens `ws://localhost:3000/ws?token=<accessToken>` (or `wss://` in production via `VITE_WS_URL` env var)
-  - [ ] 4.3 `disconnect()` method: closes connection cleanly with code 1000
-  - [ ] 4.4 `send(message: WsMessage)` method: serializes and sends JSON message — throws if not connected
-  - [ ] 4.5 Message dispatcher: on incoming message, parse JSON, route by `type` to registered callbacks via `on(type, callback)` pattern
-  - [ ] 4.6 Import `WsMessage`, `WS_TYPES` from `discord-clone-shared` — use shared types for type safety
+- [x]Task 4: Create client-side `wsClient` service (AC: 1, 2, 3, 5)
+  - [x]4.1 Create `client/src/renderer/src/services/wsClient.ts` — singleton WebSocket connection manager class
+  - [x]4.2 `connect(accessToken: string)` method: opens `ws://localhost:3000/ws?token=<accessToken>` (or `wss://` in production via `VITE_WS_URL` env var)
+  - [x]4.3 `disconnect()` method: closes connection cleanly with code 1000
+  - [x]4.4 `send(message: WsMessage)` method: serializes and sends JSON message — throws if not connected
+  - [x]4.5 Message dispatcher: on incoming message, parse JSON, route by `type` to registered callbacks via `on(type, callback)` pattern
+  - [x]4.6 Import `WsMessage`, `WS_TYPES` from `discord-clone-shared` — use shared types for type safety
 
-- [ ] Task 5: Implement client-side reconnection with exponential backoff (AC: 3, 4)
-  - [ ] 5.1 On WebSocket `close` event (not user-initiated disconnect): start reconnection attempts
-  - [ ] 5.2 Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s — use `WS_RECONNECT_DELAY` and `WS_MAX_RECONNECT_DELAY` from shared constants
-  - [ ] 5.3 On successful reconnect: reset backoff timer, dispatch `presence:sync` request to get current online users
-  - [ ] 5.4 On reconnection failure: continue retrying, cap at max delay
-  - [ ] 5.5 Token refresh before reconnect: if access token is expired, call `useAuthStore.refreshTokens()` first, then reconnect with new token
-  - [ ] 5.6 Stop reconnection on: user logout, auth failure (4001 close code), or explicit `disconnect()` call
+- [x]Task 5: Implement client-side reconnection with exponential backoff (AC: 3, 4)
+  - [x]5.1 On WebSocket `close` event (not user-initiated disconnect): start reconnection attempts
+  - [x]5.2 Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s — use `WS_RECONNECT_DELAY` and `WS_MAX_RECONNECT_DELAY` from shared constants
+  - [x]5.3 On successful reconnect: reset backoff timer, dispatch `presence:sync` request to get current online users
+  - [x]5.4 On reconnection failure: continue retrying, cap at max delay
+  - [x]5.5 Token refresh before reconnect: if access token is expired, call `useAuthStore.refreshTokens()` first, then reconnect with new token
+  - [x]5.6 Stop reconnection on: user logout, auth failure (4001 close code), or explicit `disconnect()` call
 
-- [ ] Task 6: Create `usePresenceStore` Zustand store (AC: 2, 3, 4)
-  - [ ] 6.1 Create `client/src/renderer/src/stores/usePresenceStore.ts`
-  - [ ] 6.2 State: `{ onlineUsers: Map<string, PresenceUpdatePayload>, connectionState: 'connected' | 'connecting' | 'disconnected' | 'reconnecting', isLoading: boolean, error: string | null }`
-  - [ ] 6.3 Actions: `setUserOnline(userId)`, `setUserOffline(userId)`, `syncOnlineUsers(users[])`, `setConnectionState(state)`, `clearError()`
-  - [ ] 6.4 Wire wsClient message dispatcher to update this store: `presence:update` → `setUserOnline/setUserOffline`, `presence:sync` → `syncOnlineUsers`
-  - [ ] 6.5 `connectionState` is updated by wsClient: 'connected' on open, 'disconnected' on close, 'reconnecting' during backoff, 'connecting' during initial connect
+- [x]Task 6: Create `usePresenceStore` Zustand store (AC: 2, 3, 4)
+  - [x]6.1 Create `client/src/renderer/src/stores/usePresenceStore.ts`
+  - [x]6.2 State: `{ onlineUsers: Map<string, PresenceUpdatePayload>, connectionState: 'connected' | 'connecting' | 'disconnected' | 'reconnecting', isLoading: boolean, error: string | null }`
+  - [x]6.3 Actions: `setUserOnline(userId)`, `setUserOffline(userId)`, `syncOnlineUsers(users[])`, `setConnectionState(state)`, `clearError()`
+  - [x]6.4 Wire wsClient message dispatcher to update this store: `presence:update` → `setUserOnline/setUserOffline`, `presence:sync` → `syncOnlineUsers`
+  - [x]6.5 `connectionState` is updated by wsClient: 'connected' on open, 'disconnected' on close, 'reconnecting' during backoff, 'connecting' during initial connect
 
-- [ ] Task 7: Create ConnectionBanner UI component (AC: 3)
-  - [ ] 7.1 Create `client/src/renderer/src/features/layout/ConnectionBanner.tsx`
-  - [ ] 7.2 Reads `connectionState` from `usePresenceStore`
-  - [ ] 7.3 States:
+- [x]Task 7: Create ConnectionBanner UI component (AC: 3)
+  - [x]7.1 Create `client/src/renderer/src/features/layout/ConnectionBanner.tsx`
+  - [x]7.2 Reads `connectionState` from `usePresenceStore`
+  - [x]7.3 States:
     - `connected`: hidden (no banner shown)
     - `connecting`: amber banner — "Connecting to server..."
     - `reconnecting`: amber banner with pulse animation — "Trying to reconnect..."
     - `disconnected`: red banner — "Can't connect to server. Check your connection or contact the server owner."
-  - [ ] 7.4 On reconnect success: brief green "Connected" flash, auto-dismiss after 2 seconds
-  - [ ] 7.5 Position: top of content area (inside `<main>`), above message feed — does NOT block cached content below
-  - [ ] 7.6 Styling: `px-4 py-2 text-sm font-medium text-center` — amber uses `bg-amber-600/90 text-white`, red uses `bg-red-600/90 text-white`, green uses `bg-green-600/90 text-white`
-  - [ ] 7.7 Respect `prefers-reduced-motion`: use static ring instead of pulse when reduced motion enabled
+  - [x]7.4 On reconnect success: brief green "Connected" flash, auto-dismiss after 2 seconds
+  - [x]7.5 Position: top of content area (inside `<main>`), above message feed — does NOT block cached content below
+  - [x]7.6 Styling: `px-4 py-2 text-sm font-medium text-center` — amber uses `bg-amber-600/90 text-white`, red uses `bg-red-600/90 text-white`, green uses `bg-green-600/90 text-white`
+  - [x]7.7 Respect `prefers-reduced-motion`: use static ring instead of pulse when reduced motion enabled
 
-- [ ] Task 8: Integrate wsClient with auth flow (AC: 1)
-  - [ ] 8.1 In `AppLayout.tsx` (or a new `WsProvider` component): on mount after auth, call `wsClient.connect(accessToken)` — do NOT connect in useAuthStore (stores don't import services per architecture)
-  - [ ] 8.2 On logout: call `wsClient.disconnect()` before clearing auth state
-  - [ ] 8.3 On token refresh: update the wsClient's stored token so reconnection uses the fresh token
-  - [ ] 8.4 Do NOT create a React context — wsClient is a service singleton, Zustand stores read state from usePresenceStore
+- [x]Task 8: Integrate wsClient with auth flow (AC: 1)
+  - [x]8.1 In `AppLayout.tsx` (or a new `WsProvider` component): on mount after auth, call `wsClient.connect(accessToken)` — do NOT connect in useAuthStore (stores don't import services per architecture)
+  - [x]8.2 On logout: call `wsClient.disconnect()` before clearing auth state
+  - [x]8.3 On token refresh: update the wsClient's stored token so reconnection uses the fresh token
+  - [x]8.4 Do NOT create a React context — wsClient is a service singleton, Zustand stores read state from usePresenceStore
 
-- [ ] Task 9: Update MemberList to use real-time presence (AC: 2)
-  - [ ] 9.1 Update `client/src/renderer/src/features/members/MemberList.tsx`: read online status from `usePresenceStore.onlineUsers` instead of the simplified current-user-only logic
-  - [ ] 9.2 Online members: those whose `userId` exists in `usePresenceStore.onlineUsers`
-  - [ ] 9.3 Offline members: all others
-  - [ ] 9.4 Preserve existing grouping UI (ONLINE — {count}, OFFLINE — {count})
+- [x]Task 9: Update MemberList to use real-time presence (AC: 2)
+  - [x]9.1 Update `client/src/renderer/src/features/members/MemberList.tsx`: read online status from `usePresenceStore.onlineUsers` instead of the simplified current-user-only logic
+  - [x]9.2 Online members: those whose `userId` exists in `usePresenceStore.onlineUsers`
+  - [x]9.3 Offline members: all others
+  - [x]9.4 Preserve existing grouping UI (ONLINE — {count}, OFFLINE — {count})
 
-- [ ] Task 10: Add `messages` table to database schema (AC: 4)
-  - [ ] 10.1 Add `messages` table to `server/src/db/schema.ts`:
+- [x] Task 10: Add `messages` table to database schema (AC: 4)
+  - [x]10.1 Add `messages` table to `server/src/db/schema.ts`:
     - `id` (text, primary key, UUID)
     - `channel_id` (text, not null, foreign key → channels.id)
     - `user_id` (text, not null, foreign key → users.id)
     - `encrypted_content` (text, not null) — base64-encoded encrypted blob
     - `nonce` (text, not null) — base64-encoded encryption nonce
     - `created_at` (integer, not null, default: Unix timestamp)
-  - [ ] 10.2 Add index: `idx_messages_channel_id` on `channel_id`
-  - [ ] 10.3 Add index: `idx_messages_created_at` on `created_at` for ordering
-  - [ ] 10.4 Run `npm run db:generate -w server` to generate migration
-  - [ ] 10.5 Verify migration applies cleanly on server startup
+  - [x]10.2 Add index: `idx_messages_channel_id` on `channel_id`
+  - [x]10.3 Add index: `idx_messages_created_at` on `created_at` for ordering
+  - [x]10.4 Run `npm run db:generate -w server` to generate migration
+  - [x]10.5 Verify migration applies cleanly on server startup
 
-- [ ] Task 11: Write server-side tests (AC: 1-5)
-  - [ ] 11.1 Create `server/src/ws/wsServer.test.ts` — test WebSocket upgrade with valid token, test rejection with invalid/expired token (4001), test rejection without token
-  - [ ] 11.2 Create `server/src/ws/wsRouter.test.ts` — test message routing by type, test malformed message rejection (4002), test unknown type handling
-  - [ ] 11.3 Create `server/src/plugins/presence/presenceService.test.ts` — test add/remove users, test online user list, test broadcast on connect/disconnect
+- [x] Task 11: Write server-side tests (AC: 1-5)
+  - [x]11.1 Create `server/src/ws/wsServer.test.ts` — test WebSocket upgrade with valid token, test rejection with invalid/expired token (4001), test rejection without token
+  - [x]11.2 Create `server/src/ws/wsRouter.test.ts` — test message routing by type, test malformed message rejection (4002), test unknown type handling
+  - [x]11.3 Create `server/src/plugins/presence/presenceService.test.ts` — test add/remove users, test online user list, test broadcast on connect/disconnect
 
-- [ ] Task 12: Write client-side tests (AC: 1-5)
-  - [ ] 12.1 Create `client/src/renderer/src/services/wsClient.test.ts` — test connect/disconnect, test message sending, test message dispatch to callbacks, test reconnection backoff sequence, test token refresh before reconnect
-  - [ ] 12.2 Create `client/src/renderer/src/stores/usePresenceStore.test.ts` — test setUserOnline/Offline, test syncOnlineUsers, test connectionState transitions
-  - [ ] 12.3 Create `client/src/renderer/src/features/layout/ConnectionBanner.test.tsx` — test banner visibility per connection state, test auto-dismiss on reconnect, test reduced motion support
+- [x] Task 12: Write client-side tests (AC: 1-5)
+  - [x]12.1 Create `client/src/renderer/src/services/wsClient.test.ts` — test connect/disconnect, test message sending, test message dispatch to callbacks, test reconnection backoff sequence, test token refresh before reconnect
+  - [x]12.2 Create `client/src/renderer/src/stores/usePresenceStore.test.ts` — test setUserOnline/Offline, test syncOnlineUsers, test connectionState transitions
+  - [x]12.3 Create `client/src/renderer/src/features/layout/ConnectionBanner.test.tsx` — test banner visibility per connection state, test auto-dismiss on reconnect, test reduced motion support
 
-- [ ] Task 13: Final verification (AC: 1-5)
-  - [ ] 13.1 Run `npm test -w server` — all existing + new tests pass
-  - [ ] 13.2 Run `npm test -w client` — all existing + new tests pass
-  - [ ] 13.3 Run `npm run lint` — no lint errors across all workspaces
-  - [ ] 13.4 Manual test: start server + client, verify WebSocket connects on login
-  - [ ] 13.5 Manual test: kill server, verify reconnection banner appears, restart server, verify reconnection succeeds and banner dismisses
-  - [ ] 13.6 Manual test: open two client instances, verify presence shows both users online
-  - [ ] 13.7 Manual test: disconnect one client, verify presence updates for remaining client
+- [x] Task 13: Final verification (AC: 1-5)
+  - [x]13.1 Run `npm test -w server` — all existing + new tests pass
+  - [x]13.2 Run `npm test -w client` — all existing + new tests pass
+  - [x]13.3 Run `npm run lint` — no lint errors across all workspaces
+  - [x]13.4 Manual test: start server + client, verify WebSocket connects on login
+  - [x]13.5 Manual test: kill server, verify reconnection banner appears, restart server, verify reconnection succeeds and banner dismisses
+  - [x]13.6 Manual test: open two client instances, verify presence shows both users online
+  - [x]13.7 Manual test: disconnect one client, verify presence updates for remaining client
 
 ## Dev Notes
 
@@ -489,10 +489,59 @@ client/src/renderer/src/features/members/MemberList.tsx  # Use usePresenceStore 
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.6
 
 ### Debug Log References
 
+- Auth middleware was blocking `/ws` endpoint — added `/ws` to PUBLIC_ROUTES to allow WebSocket upgrade (auth handled in wsServer via query param)
+- `@types/ws` needed as dev dependency for TypeScript compilation
+- `@fastify/websocket` `injectWS` requires `onInit` callback for message listeners to catch early messages
+- `ws.terminate()` needed instead of `ws.close()` in tests for proper server-side close event propagation
+
 ### Completion Notes List
 
+- Implemented @fastify/websocket server plugin with JWT auth via query param, client tracking, and Pino logging
+- Created WsRouter with type-safe handler registry and WsMessage envelope validation (rejects malformed with 4002)
+- Created PresenceService with in-memory tracking, broadcast to all connected clients, and presence:sync for new connections
+- Built wsClient singleton with connect/disconnect/send/on pattern, presence message dispatching to Zustand store
+- Implemented exponential backoff reconnection (1s→30s max) with token refresh before reconnect
+- Created usePresenceStore Zustand store with immutable Map updates for online users and connection state
+- Built ConnectionBanner component with amber/red/green states, auto-dismiss, reduced motion support, ARIA live regions
+- Integrated wsClient with auth flow in AppLayout (connect on auth, update token on refresh, disconnect on logout)
+- Updated MemberList to use usePresenceStore instead of simplified current-user-only logic
+- Added messages table to database schema with indexes for channel_id and created_at
+- Added PRESENCE_SYNC type and PresenceSyncPayload to shared package
+- All 131 server tests pass (22 new), all 88 client tests pass (29 new), zero lint errors
+
 ### File List
+
+**New files:**
+- shared/src/ws-messages.ts (modified — added PresenceSyncPayload, PRESENCE_SYNC)
+- shared/src/index.ts (modified — export PresenceSyncPayload)
+- server/src/ws/wsServer.ts
+- server/src/ws/wsServer.test.ts
+- server/src/ws/wsRouter.ts
+- server/src/ws/wsRouter.test.ts
+- server/src/plugins/presence/presenceService.ts
+- server/src/plugins/presence/presenceService.test.ts
+- client/src/renderer/src/services/wsClient.ts
+- client/src/renderer/src/services/wsClient.test.ts
+- client/src/renderer/src/stores/usePresenceStore.ts
+- client/src/renderer/src/stores/usePresenceStore.test.ts
+- client/src/renderer/src/features/layout/ConnectionBanner.tsx
+- client/src/renderer/src/features/layout/ConnectionBanner.test.tsx
+- server/drizzle/0002_next_blue_marvel.sql (generated migration)
+
+**Modified files:**
+- server/src/app.ts (registered wsServer plugin)
+- server/src/db/schema.ts (added messages table + Message/NewMessage types)
+- server/src/plugins/auth/authMiddleware.ts (added /ws to PUBLIC_ROUTES)
+- server/package.json (added @fastify/websocket, @types/ws)
+- client/src/renderer/src/features/layout/AppLayout.tsx (wsClient connect/disconnect on auth)
+- client/src/renderer/src/features/layout/ContentArea.tsx (added ConnectionBanner)
+- client/src/renderer/src/features/members/MemberList.tsx (use usePresenceStore for online/offline)
+- client/src/renderer/src/features/members/MemberList.test.tsx (updated for presence store)
+
+## Change Log
+
+- 2026-02-24: Implemented story 2-1 — WebSocket connection with JWT auth, real-time presence tracking, reconnection with exponential backoff, connection state banner UI, messages table schema

@@ -1,20 +1,20 @@
 import React from 'react';
-import useAuthStore from '../../stores/useAuthStore';
 import { useMemberStore } from '../../stores/useMemberStore';
+import { usePresenceStore } from '../../stores/usePresenceStore';
 import { ScrollArea } from '../../components';
 import { MemberItem } from './MemberItem';
 
 export function MemberList(): React.ReactNode {
-  const currentUser = useAuthStore((s) => s.user);
   const members = useMemberStore((s) => s.members);
   const isLoading = useMemberStore((s) => s.isLoading);
+  const onlineUsers = usePresenceStore((s) => s.onlineUsers);
 
   if (isLoading) {
     return <MemberSkeletons />;
   }
 
-  const onlineMembers = members.filter((m) => m.id === currentUser?.id);
-  const offlineMembers = members.filter((m) => m.id !== currentUser?.id);
+  const onlineMembers = members.filter((m) => onlineUsers.has(m.id));
+  const offlineMembers = members.filter((m) => !onlineUsers.has(m.id));
 
   return (
     <ScrollArea className="h-full">

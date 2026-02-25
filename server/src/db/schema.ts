@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { sql } from 'drizzle-orm';
 import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm';
 
@@ -53,6 +54,19 @@ export const channels = sqliteTable('channels', {
   index('idx_channels_type').on(table.type),
 ]);
 
+// --- Messages ---
+export const messages = sqliteTable('messages', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  channelId: text('channel_id').notNull().references(() => channels.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  encryptedContent: text('encrypted_content').notNull(),
+  nonce: text('nonce').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (table) => [
+  index('idx_messages_channel_id').on(table.channelId),
+  index('idx_messages_created_at').on(table.createdAt),
+]);
+
 // --- Inferred Types ---
 export type User = InferSelectModel<typeof users>;
 export type NewUser = InferInsertModel<typeof users>;
@@ -68,3 +82,6 @@ export type NewBan = InferInsertModel<typeof bans>;
 
 export type Channel = InferSelectModel<typeof channels>;
 export type NewChannel = InferInsertModel<typeof channels>;
+
+export type Message = InferSelectModel<typeof messages>;
+export type NewMessage = InferInsertModel<typeof messages>;

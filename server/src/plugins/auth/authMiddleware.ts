@@ -7,6 +7,7 @@ const PUBLIC_ROUTES = [
   '/api/auth/register',
   '/api/auth/refresh',
   '/api/health',
+  '/ws',
 ];
 
 const PUBLIC_ROUTE_PATTERNS = [

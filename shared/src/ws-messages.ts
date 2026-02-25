@@ -43,6 +43,10 @@ export interface PresenceUpdatePayload {
   status: 'online' | 'idle' | 'dnd' | 'offline';
 }
 
+export interface PresenceSyncPayload {
+  users: PresenceUpdatePayload[];
+}
+
 // Type constants for namespace:action pattern
 export const WS_TYPES = {
   TEXT_SEND: 'text:send',
@@ -53,6 +57,7 @@ export const WS_TYPES = {
   VOICE_STATE: 'voice:state',
   VOICE_SIGNAL: 'voice:signal',
   PRESENCE_UPDATE: 'presence:update',
+  PRESENCE_SYNC: 'presence:sync',
   CHANNEL_UPDATE: 'channel:update',
   USER_UPDATE: 'user:update',
 } as const;

@@ -8,7 +8,8 @@ import { validateInvite } from '../invites/inviteService.js';
 import { createSession, findSessionByTokenHash, deleteSession, cleanExpiredSessions } from './sessionService.js';
 import { getAuthenticatedUser } from './authMiddleware.js';
 import { encryptGroupKeyForUser, getGroupKey, initializeSodium, deserializePublicKey } from '../../services/encryptionService.js';
-import { X25519_PUBLIC_KEY_BYTES } from 'discord-clone-shared';
+import { X25519_PUBLIC_KEY_BYTES, WS_TYPES } from 'discord-clone-shared';
+import { broadcastToAll } from '../../ws/wsServer.js';
 
 interface RegisterBody {
   username: string;
@@ -238,6 +239,17 @@ export default fp(async (fastify: FastifyInstance) => {
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
     createSession(fastify.db, result.user.id, refreshToken);
+
+    // Notify existing clients about the new member
+    broadcastToAll({
+      type: WS_TYPES.MEMBER_ADDED,
+      payload: {
+        id: result.user.id,
+        username: result.user.username,
+        role: result.user.role,
+        createdAt: result.user.created_at.toISOString(),
+      },
+    }, fastify.log);
 
     return reply.status(201).send({
       data: {

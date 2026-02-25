@@ -146,6 +146,13 @@ export interface UserBannedPayload {
   userId: string;
 }
 
+export interface MemberAddedPayload {
+  id: string;
+  username: string;
+  role: 'owner' | 'user';
+  createdAt: string;
+}
+
 export interface MemberRemovedPayload {
   userId: string;
 }
@@ -177,5 +184,6 @@ export const WS_TYPES = {
   USER_UPDATE: 'user:update',
   USER_KICKED: 'user:kicked',
   USER_BANNED: 'user:banned',
+  MEMBER_ADDED: 'member:added',
   MEMBER_REMOVED: 'member:removed',
 } as const;

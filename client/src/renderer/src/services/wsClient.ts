@@ -5,6 +5,7 @@ import type {
   TextReceivePayload,
   ChannelCreatedPayload,
   ChannelDeletedPayload,
+  MemberAddedPayload,
   MemberRemovedPayload,
   VoicePeerJoinedPayload,
   VoicePeerLeftPayload,
@@ -295,6 +296,9 @@ class WsClient {
       useAdminNotificationStore.getState().showKicked();
     } else if (message.type === WS_TYPES.USER_BANNED) {
       useAdminNotificationStore.getState().showBanned();
+    } else if (message.type === WS_TYPES.MEMBER_ADDED) {
+      const payload = message.payload as MemberAddedPayload;
+      useMemberStore.getState().addMember(payload);
     } else if (message.type === WS_TYPES.MEMBER_REMOVED) {
       const payload = message.payload as MemberRemovedPayload;
       useMemberStore.getState().removeMember(payload.userId);

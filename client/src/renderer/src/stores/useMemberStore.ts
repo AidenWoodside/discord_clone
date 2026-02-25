@@ -7,6 +7,7 @@ interface MemberState {
   isLoading: boolean;
   error: string | null;
   fetchMembers: () => Promise<void>;
+  addMember: (member: UserPublic) => void;
   removeMember: (userId: string) => void;
   clearError: () => void;
 }
@@ -24,6 +25,10 @@ export const useMemberStore = create<MemberState>((set) => ({
       set({ error: (err as Error).message, isLoading: false });
     }
   },
+  addMember: (member: UserPublic) => set((state) => {
+    if (state.members.some((m) => m.id === member.id)) return state;
+    return { members: [...state.members, member] };
+  }),
   removeMember: (userId: string) => set((state) => ({
     members: state.members.filter((m) => m.id !== userId),
   })),

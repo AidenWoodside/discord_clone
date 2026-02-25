@@ -40,6 +40,7 @@ export type {
   ChannelDeletedPayload,
   UserKickedPayload,
   UserBannedPayload,
+  MemberAddedPayload,
   MemberRemovedPayload,
 } from './ws-messages.js';
 

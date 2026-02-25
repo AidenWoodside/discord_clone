@@ -221,4 +221,50 @@ describe('ContentArea', () => {
       expect(screen.getByText('Message not delivered')).toBeInTheDocument();
     });
   });
+
+  it('redirects to next text channel when active channel is removed', async () => {
+    renderContentArea('ch-1');
+    expect(screen.getByText('Welcome to #general')).toBeInTheDocument();
+
+    // Simulate channel deletion via WS — remove ch-1, activeChannelId updates to ch-2
+    useChannelStore.setState({
+      channels: [
+        { id: 'ch-2', name: 'help', type: 'text', createdAt: '2024-01-01' },
+      ],
+      activeChannelId: 'ch-2',
+    });
+
+    // Should redirect to the remaining channel
+    expect(await screen.findByText('Welcome to #help')).toBeInTheDocument();
+  });
+
+  it('redirects to /app/channels when all channels are removed', async () => {
+    renderContentArea('ch-1');
+    expect(screen.getByText('Welcome to #general')).toBeInTheDocument();
+
+    // Simulate all channels deleted
+    useChannelStore.setState({
+      channels: [],
+      activeChannelId: null,
+    });
+
+    // Should show "Select a channel" (redirected to /app/channels)
+    expect(await screen.findByText('Select a channel')).toBeInTheDocument();
+  });
+
+  it('does not redirect when a non-active channel is removed', () => {
+    renderContentArea('ch-1');
+    expect(screen.getByText('Welcome to #general')).toBeInTheDocument();
+
+    // Remove ch-2 (not the active channel)
+    useChannelStore.setState({
+      channels: [
+        { id: 'ch-1', name: 'general', type: 'text', createdAt: '2024-01-01' },
+      ],
+      activeChannelId: 'ch-1',
+    });
+
+    // Should still show the active channel
+    expect(screen.getByText('Welcome to #general')).toBeInTheDocument();
+  });
 });

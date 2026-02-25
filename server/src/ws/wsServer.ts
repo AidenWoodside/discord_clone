@@ -1,6 +1,8 @@
 import type { WebSocket } from 'ws';
+import type { BaseLogger } from 'pino';
 import websocket from '@fastify/websocket';
 import fp from 'fastify-plugin';
+import type { WsMessage } from 'discord-clone-shared';
 import { WS_TYPES } from 'discord-clone-shared';
 import { verifyAccessToken } from '../plugins/auth/authService.js';
 import { routeMessage, registerHandler } from './wsRouter.js';
@@ -17,6 +19,19 @@ const clients = new Map<string, WebSocket>();
 
 export function getClients(): Map<string, WebSocket> {
   return clients;
+}
+
+export function broadcastToAll(message: WsMessage, log?: BaseLogger): void {
+  const data = JSON.stringify(message);
+  for (const ws of clients.values()) {
+    if (ws.readyState === ws.OPEN) {
+      try {
+        ws.send(data);
+      } catch (err) {
+        log?.warn({ error: (err as Error).message }, 'Failed to send WebSocket broadcast');
+      }
+    }
+  }
 }
 
 export default fp(async function wsServer(fastify) {

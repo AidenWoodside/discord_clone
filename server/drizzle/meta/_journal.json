@@ -22,6 +22,13 @@
       "when": 1771992369374,
       "tag": "0002_next_blue_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1772000020172,
+      "tag": "0003_wandering_norman_osborn",
+      "breakpoints": true
     }
   ]
 }

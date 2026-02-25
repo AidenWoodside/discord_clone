@@ -35,6 +35,8 @@ export type {
   VoicePeerLeftPayload,
   PresenceUpdatePayload,
   PresenceSyncPayload,
+  ChannelCreatedPayload,
+  ChannelDeletedPayload,
 } from './ws-messages.js';
 
 export { WS_TYPES } from './ws-messages.js';

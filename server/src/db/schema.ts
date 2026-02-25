@@ -47,7 +47,7 @@ export const bans = sqliteTable('bans', {
 // --- Channels ---
 export const channels = sqliteTable('channels', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  name: text('name').notNull(),
+  name: text('name').notNull().unique(),
   type: text('type', { enum: ['text', 'voice'] }).notNull(),
   created_at: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 }, (table) => [

@@ -49,6 +49,22 @@ describe('channelService', () => {
       const channel = createChannel(app.db, name, 'text');
       expect(channel.name).toBe(name);
     });
+
+    it('throws ChannelValidationError for duplicate name', () => {
+      createChannel(app.db, 'general', 'text');
+      expect(() => createChannel(app.db, 'general', 'voice')).toThrow(ChannelValidationError);
+      expect(() => createChannel(app.db, 'general', 'voice')).toThrow('already exists');
+    });
+
+    it('throws ChannelValidationError when channel limit is reached', () => {
+      // Seed channels up to the limit
+      for (let i = 0; i < 50; i++) {
+        app.db.insert(channels).values({ name: `channel-${i}`, type: 'text' }).run();
+      }
+
+      expect(() => createChannel(app.db, 'one-too-many', 'text')).toThrow(ChannelValidationError);
+      expect(() => createChannel(app.db, 'one-too-many', 'text')).toThrow('Channel limit reached');
+    });
   });
 
   describe('deleteChannel', () => {

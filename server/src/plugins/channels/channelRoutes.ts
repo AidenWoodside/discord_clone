@@ -1,7 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import { WS_TYPES } from 'discord-clone-shared';
-import { getAllChannels, createChannel, deleteChannel, ChannelNotFoundError } from './channelService.js';
+import { getAllChannels, createChannel, deleteChannel, ChannelNotFoundError, ChannelValidationError } from './channelService.js';
 import { broadcastToAll } from '../../ws/wsServer.js';
+
+const channelResponseSchema = {
+  type: 'object',
+  required: ['id', 'name', 'type', 'createdAt'],
+  properties: {
+    id: { type: 'string' },
+    name: { type: 'string' },
+    type: { type: 'string' },
+    createdAt: { type: 'string' },
+  },
+} as const;
 
 export default async function channelRoutes(fastify: FastifyInstance) {
   fastify.get('/', {
@@ -13,16 +24,7 @@ export default async function channelRoutes(fastify: FastifyInstance) {
           properties: {
             data: {
               type: 'array',
-              items: {
-                type: 'object',
-                required: ['id', 'name', 'type', 'createdAt'],
-                properties: {
-                  id: { type: 'string' },
-                  name: { type: 'string' },
-                  type: { type: 'string' },
-                  createdAt: { type: 'string' },
-                },
-              },
+              items: channelResponseSchema,
             },
             count: { type: 'number' },
           },
@@ -44,6 +46,15 @@ export default async function channelRoutes(fastify: FastifyInstance) {
           type: { type: 'string', enum: ['text', 'voice'] },
         },
       },
+      response: {
+        201: {
+          type: 'object',
+          required: ['data'],
+          properties: {
+            data: channelResponseSchema,
+          },
+        },
+      },
     },
   }, async (request, reply) => {
     if (request.user?.role !== 'owner') {
@@ -53,9 +64,20 @@ export default async function channelRoutes(fastify: FastifyInstance) {
     }
 
     const { name, type } = request.body as { name: string; type: 'text' | 'voice' };
-    const channel = createChannel(fastify.db, name.toLowerCase().replace(/\s+/g, '-'), type);
 
-    broadcastToAll({ type: WS_TYPES.CHANNEL_CREATED, payload: { channel } });
+    let channel;
+    try {
+      channel = createChannel(fastify.db, name.toLowerCase().replace(/\s+/g, '-'), type);
+    } catch (err) {
+      if (err instanceof ChannelValidationError) {
+        return reply.status(400).send({
+          error: { code: 'VALIDATION_ERROR', message: err.message },
+        });
+      }
+      throw err;
+    }
+
+    broadcastToAll({ type: WS_TYPES.CHANNEL_CREATED, payload: { channel } }, fastify.log);
     return reply.status(201).send({ data: channel });
   });
 
@@ -67,6 +89,9 @@ export default async function channelRoutes(fastify: FastifyInstance) {
         properties: {
           channelId: { type: 'string' },
         },
+      },
+      response: {
+        204: { type: 'null', description: 'Channel deleted' },
       },
     },
   }, async (request, reply) => {
@@ -88,7 +113,7 @@ export default async function channelRoutes(fastify: FastifyInstance) {
       throw err;
     }
 
-    broadcastToAll({ type: WS_TYPES.CHANNEL_DELETED, payload: { channelId } });
+    broadcastToAll({ type: WS_TYPES.CHANNEL_DELETED, payload: { channelId } }, fastify.log);
     return reply.status(204).send();
   });
 }

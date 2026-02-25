@@ -8,8 +8,19 @@ vi.hoisted(() => {
 });
 vi.stubEnv('DATABASE_PATH', ':memory:');
 
+vi.mock('../../ws/wsServer.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../ws/wsServer.js')>();
+  return {
+    ...original,
+    broadcastToAll: vi.fn(),
+  };
+});
+
 import { setupApp, seedUserWithSession, seedOwner, seedRegularUser } from '../../test/helpers.js';
 import { channels, messages } from '../../db/schema.js';
+import { broadcastToAll } from '../../ws/wsServer.js';
+
+const mockBroadcast = vi.mocked(broadcastToAll);
 
 describe('GET /api/channels', () => {
   let app: FastifyInstance;
@@ -18,8 +29,9 @@ describe('GET /api/channels', () => {
     app = await setupApp();
     app.db.insert(channels).values([
       { name: 'general', type: 'text' },
-      { name: 'Gaming', type: 'voice' },
+      { name: 'gaming', type: 'voice' },
     ]).run();
+    mockBroadcast.mockClear();
   });
 
   it('returns channel list for authenticated user', async () => {
@@ -36,7 +48,7 @@ describe('GET /api/channels', () => {
     expect(body.data).toBeInstanceOf(Array);
     expect(body.count).toBe(2);
     expect(body.data.some((c: { name: string; type: string }) => c.name === 'general' && c.type === 'text')).toBe(true);
-    expect(body.data.some((c: { name: string; type: string }) => c.name === 'Gaming' && c.type === 'voice')).toBe(true);
+    expect(body.data.some((c: { name: string; type: string }) => c.name === 'gaming' && c.type === 'voice')).toBe(true);
   });
 
   it('returns channels with correct camelCase fields', async () => {
@@ -74,6 +86,7 @@ describe('POST /api/channels', () => {
 
   beforeEach(async () => {
     app = await setupApp();
+    mockBroadcast.mockClear();
   });
 
   it('creates a text channel with valid owner token', async () => {
@@ -122,6 +135,52 @@ describe('POST /api/channels', () => {
     expect(response.statusCode).toBe(201);
     const body = JSON.parse(response.payload);
     expect(body.data.name).toBe('my-new-channel');
+  });
+
+  it('broadcasts channel:created WS message on success', async () => {
+    const { token } = await seedOwner(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/channels',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: 'broadcast-test', type: 'text' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(mockBroadcast).toHaveBeenCalledOnce();
+    expect(mockBroadcast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'channel:created',
+        payload: expect.objectContaining({
+          channel: expect.objectContaining({ name: 'broadcast-test', type: 'text' }),
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('returns 400 for duplicate channel name', async () => {
+    const { token } = await seedOwner(app);
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/channels',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: 'unique-channel', type: 'text' },
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/channels',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: 'unique-channel', type: 'text' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.payload);
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).toContain('already exists');
   });
 
   it('returns 403 with non-owner token', async () => {
@@ -184,6 +243,7 @@ describe('DELETE /api/channels/:channelId', () => {
 
   beforeEach(async () => {
     app = await setupApp();
+    mockBroadcast.mockClear();
   });
 
   it('deletes a channel with valid owner token', async () => {
@@ -201,6 +261,27 @@ describe('DELETE /api/channels/:channelId', () => {
     // Verify channel is gone
     const remaining = app.db.select().from(channels).all();
     expect(remaining).toHaveLength(0);
+  });
+
+  it('broadcasts channel:deleted WS message on success', async () => {
+    const { token } = await seedOwner(app);
+    const channel = app.db.insert(channels).values({ name: 'to-broadcast-delete', type: 'text' }).returning().get();
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: `/api/channels/${channel.id}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(mockBroadcast).toHaveBeenCalledOnce();
+    expect(mockBroadcast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'channel:deleted',
+        payload: { channelId: channel.id },
+      }),
+      expect.anything(),
+    );
   });
 
   it('returns 403 with non-owner token', async () => {

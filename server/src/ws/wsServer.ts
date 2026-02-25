@@ -1,4 +1,5 @@
 import type { WebSocket } from 'ws';
+import type { BaseLogger } from 'pino';
 import websocket from '@fastify/websocket';
 import fp from 'fastify-plugin';
 import type { WsMessage } from 'discord-clone-shared';
@@ -18,14 +19,14 @@ export function getClients(): Map<string, WebSocket> {
   return clients;
 }
 
-export function broadcastToAll(message: WsMessage): void {
+export function broadcastToAll(message: WsMessage, log?: BaseLogger): void {
   const data = JSON.stringify(message);
   for (const ws of clients.values()) {
     if (ws.readyState === ws.OPEN) {
       try {
         ws.send(data);
-      } catch {
-        // Failed to send — continue broadcasting to others
+      } catch (err) {
+        log?.warn({ error: (err as Error).message }, 'Failed to send WebSocket broadcast');
       }
     }
   }

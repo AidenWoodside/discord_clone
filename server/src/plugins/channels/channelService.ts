@@ -1,4 +1,5 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
+import { MAX_CHANNELS_PER_SERVER } from 'discord-clone-shared';
 import { channels, messages } from '../../db/schema.js';
 import type { AppDatabase } from '../../db/connection.js';
 
@@ -15,6 +16,16 @@ export function createChannel(db: AppDatabase, name: string, type: 'text' | 'voi
   const trimmed = name.trim();
   if (!trimmed || trimmed.length > 50) {
     throw new ChannelValidationError('Channel name must be between 1 and 50 characters');
+  }
+
+  const countResult = db.select({ count: sql<number>`count(*)` }).from(channels).get();
+  if (countResult && countResult.count >= MAX_CHANNELS_PER_SERVER) {
+    throw new ChannelValidationError(`Channel limit reached (max ${MAX_CHANNELS_PER_SERVER})`);
+  }
+
+  const existing = db.select({ id: channels.id }).from(channels).where(eq(channels.name, trimmed)).get();
+  if (existing) {
+    throw new ChannelValidationError('A channel with this name already exists');
   }
 
   return db.insert(channels).values({
@@ -34,8 +45,10 @@ export function deleteChannel(db: AppDatabase, channelId: string) {
     throw new ChannelNotFoundError('Channel not found');
   }
 
-  db.delete(messages).where(eq(messages.channel_id, channelId)).run();
-  db.delete(channels).where(eq(channels.id, channelId)).run();
+  db.transaction((tx) => {
+    tx.delete(messages).where(eq(messages.channel_id, channelId)).run();
+    tx.delete(channels).where(eq(channels.id, channelId)).run();
+  });
 }
 
 export class ChannelValidationError extends Error {

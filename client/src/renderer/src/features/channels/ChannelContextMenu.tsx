@@ -35,7 +35,6 @@ export function ChannelContextMenu({ channelId, channelName, children }: Channel
         </RadixContextMenu.Trigger>
         <RadixContextMenu.Portal>
           <RadixContextMenu.Content className="min-w-[180px] rounded-lg bg-bg-floating p-1.5 shadow-lg">
-            <RadixContextMenu.Separator className="h-px bg-border-default my-1" />
             <RadixContextMenu.Item
               className="cursor-pointer rounded px-2 py-1.5 text-sm text-error outline-none hover:bg-error/10 flex items-center gap-2"
               onSelect={() => setDeleteDialogOpen(true)}

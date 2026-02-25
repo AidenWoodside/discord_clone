@@ -55,6 +55,8 @@ export async function joinVoiceChannel(channelId: string): Promise<JoinVoiceResu
         useVoiceStore.getState().setSpeaking(userId, speaking);
       });
     }
+  } else {
+    console.warn('[voiceService] Local stream unavailable — speaking indicator disabled');
   }
 
   return { existingPeers };

@@ -1,6 +1,6 @@
 # Story 3.3: Real-Time Voice Audio & Speaking Indicators
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -418,9 +418,32 @@ Claude Opus 4.6
 - **Task 8:** Wrote comprehensive tests: 11 VAD tests, 13 new voice store tests, 9 new VoiceParticipant tests, 5 new mediaService tests. All 303 tests pass across 35 files.
 - **Task 9:** Tests pass (303/303), lint clean, build successful. Manual tests deferred to user.
 
+### Senior Developer Review (AI)
+
+**Reviewer:** Code Review Workflow — 2026-02-25
+**Outcome:** Changes Requested → Fixed
+
+**Issues Found:** 3 High, 4 Medium, 3 Low (10 total)
+**Issues Fixed:** 9 (all HIGH, all MEDIUM except M4, all LOW)
+**Issues Deferred:** 1 (M4: per-peer AudioContext optimization — within browser limits, defer to scale)
+
+**Fixes Applied:**
+1. **H1: Stale speakingUsers on peer departure** — Added `speakingUsers.delete(userId)` in `removePeer()` (`useVoiceStore.ts`)
+2. **H2: No error handling in createVADInstance** — Wrapped in try/catch, returns null on failure, callers handle gracefully (`vadService.ts`)
+3. **H3: destroyVADInstance doesn't clear speaking state** — Resolved by H1 fix (cleanup at store level)
+4. **M1: Test gap — unmute VAD restart** — Added test with mock stream verifying `startLocalVAD` called on unmute (`useVoiceStore.test.ts`)
+5. **M2: Test gap — undeafen wasMutedBeforeDeafen** — Added 3 tests: restoreMuted=false, restoreMuted=true, VAD restart on undeafen (`useVoiceStore.test.ts`)
+6. **M3+L2: Redundant JS matchMedia** — Removed JS check from VoiceParticipant, CSS `@media (prefers-reduced-motion)` in globals.css handles it (`VoiceParticipant.tsx`)
+7. **L1: Silent error swallowing** — Added `console.warn` to vadService AudioContext close and wsClient speaking state import (`vadService.ts`, `wsClient.ts`)
+8. **L3: No warning when VAD can't start** — Added `console.warn` when localStream unavailable (`voiceService.ts`)
+9. **H1 regression test** — Added test verifying `removePeer` clears departed user from speakingUsers (`useVoiceStore.test.ts`)
+
+**Test Results After Fixes:** 305/305 pass (35 files), lint clean, build successful
+
 ### Change Log
 
 - 2026-02-25: Implemented story 3-3 — VAD service, speaking indicators, actual mute/deafen functionality, comprehensive tests
+- 2026-02-25: Code review — fixed 9 issues (3H, 3M, 3L): stale speakingUsers cleanup, VAD error handling, test coverage gaps, CSS-only reduced motion, warning logs
 
 ### File List
 

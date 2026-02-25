@@ -172,7 +172,9 @@ class WsClient {
       vadService.startRemoteVAD(consumer, payload.peerId, (peerId, speaking) => {
         import('../stores/useVoiceStore').then(({ useVoiceStore }) => {
           useVoiceStore.getState().setSpeaking(peerId, speaking);
-        }).catch(() => {});
+        }).catch((err) => {
+          console.warn('[wsClient] Failed to update speaking state:', err);
+        });
       });
     } catch (err) {
       console.warn('[wsClient] Failed to consume producer audio:', (err as Error).message);

@@ -16,43 +16,50 @@ const remoteVADs = new Map<string, VADInstance>();
 function createVADInstance(
   stream: MediaStream,
   onSpeakingChange: (speaking: boolean) => void,
-): VADInstance {
-  const audioContext = new AudioContext();
-  const source = audioContext.createMediaStreamSource(stream);
-  const analyser = audioContext.createAnalyser();
-  analyser.fftSize = 256;
+): VADInstance | null {
+  let audioContext: AudioContext | null = null;
+  try {
+    audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
 
-  source.connect(analyser);
+    source.connect(analyser);
 
-  // Connect through a silent gain node to destination so AnalyserNode gets data
-  const gainNode = audioContext.createGain();
-  gainNode.gain.value = 0;
-  analyser.connect(gainNode);
-  gainNode.connect(audioContext.destination);
+    // Connect through a silent gain node to destination so AnalyserNode gets data
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = 0;
+    analyser.connect(gainNode);
+    gainNode.connect(audioContext.destination);
 
-  const dataArray = new Uint8Array(analyser.frequencyBinCount);
-  let isSpeaking = false;
-  let lastSpeakingTime = 0;
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    let isSpeaking = false;
+    let lastSpeakingTime = 0;
 
-  const intervalId = setInterval(() => {
-    analyser.getByteFrequencyData(dataArray);
+    const intervalId = setInterval(() => {
+      analyser.getByteFrequencyData(dataArray);
 
-    const sum = dataArray.reduce((acc, val) => acc + val * val, 0);
-    const rms = Math.sqrt(sum / dataArray.length);
+      const sum = dataArray.reduce((acc, val) => acc + val * val, 0);
+      const rms = Math.sqrt(sum / dataArray.length);
 
-    if (rms > SPEAKING_THRESHOLD) {
-      if (!isSpeaking) {
-        isSpeaking = true;
-        onSpeakingChange(true);
+      if (rms > SPEAKING_THRESHOLD) {
+        if (!isSpeaking) {
+          isSpeaking = true;
+          onSpeakingChange(true);
+        }
+        lastSpeakingTime = Date.now();
+      } else if (isSpeaking && Date.now() - lastSpeakingTime > HOLD_TIME_MS) {
+        isSpeaking = false;
+        onSpeakingChange(false);
       }
-      lastSpeakingTime = Date.now();
-    } else if (isSpeaking && Date.now() - lastSpeakingTime > HOLD_TIME_MS) {
-      isSpeaking = false;
-      onSpeakingChange(false);
-    }
-  }, POLL_INTERVAL_MS);
+    }, POLL_INTERVAL_MS);
 
-  return { audioContext, analyser, source, gainNode, intervalId };
+    return { audioContext, analyser, source, gainNode, intervalId };
+  } catch (err) {
+    console.warn('[vadService] Failed to create VAD instance:', (err as Error).message);
+    audioContext?.close().catch(() => {});
+    return null;
+  }
 }
 
 function destroyVADInstance(instance: VADInstance): void {
@@ -60,7 +67,9 @@ function destroyVADInstance(instance: VADInstance): void {
   instance.source.disconnect();
   instance.analyser.disconnect();
   instance.gainNode.disconnect();
-  instance.audioContext.close().catch(() => {});
+  instance.audioContext.close().catch((err) => {
+    console.warn('[vadService] AudioContext close failed:', err);
+  });
 }
 
 export function startLocalVAD(
@@ -69,6 +78,7 @@ export function startLocalVAD(
 ): void {
   stopLocalVAD();
   localVAD = createVADInstance(stream, onSpeakingChange);
+  // null means VAD creation failed — voice still works, just no speaking indicator
 }
 
 export function startRemoteVAD(
@@ -81,7 +91,9 @@ export function startRemoteVAD(
   const instance = createVADInstance(stream, (speaking) => {
     onSpeakingChange(peerId, speaking);
   });
-  remoteVADs.set(peerId, instance);
+  if (instance) {
+    remoteVADs.set(peerId, instance);
+  }
 }
 
 export function stopLocalVAD(): void {

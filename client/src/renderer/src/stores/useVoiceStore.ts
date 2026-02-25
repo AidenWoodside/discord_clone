@@ -162,7 +162,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       } else {
         participants.delete(channelId);
       }
-      return { channelParticipants: participants };
+      const speakingUsers = new Set(state.speakingUsers);
+      speakingUsers.delete(userId);
+      return { channelParticipants: participants, speakingUsers };
     });
   },
 

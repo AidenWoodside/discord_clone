@@ -16,13 +16,6 @@ vi.mock('../../stores/useAuthStore', () => ({
   ),
 }));
 
-// Mock window.matchMedia for reduced motion tests
-const mockMatchMedia = vi.fn().mockReturnValue({ matches: false });
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: mockMatchMedia,
-});
-
 beforeEach(() => {
   useMemberStore.setState({
     members: [
@@ -34,7 +27,6 @@ beforeEach(() => {
     speakingUsers: new Set<string>(),
     isMuted: false,
   });
-  mockMatchMedia.mockReturnValue({ matches: false });
 });
 
 describe('VoiceParticipant', () => {
@@ -77,13 +69,14 @@ describe('VoiceParticipant', () => {
   });
 
   describe('speaking indicator', () => {
-    it('shows speaking ring when user is in speakingUsers', () => {
+    it('shows speaking ring and animation class when user is in speakingUsers', () => {
       useVoiceStore.setState({ speakingUsers: new Set(['user-1']) });
       render(<VoiceParticipant userId="user-1" />);
 
       const avatar = screen.getByText('A');
       expect(avatar.className).toContain('ring-2');
       expect(avatar.className).toContain('ring-voice-speaking');
+      expect(avatar.className).toContain('animate-speakingPulse');
     });
 
     it('does not show speaking ring when user is not speaking', () => {
@@ -92,30 +85,11 @@ describe('VoiceParticipant', () => {
       const avatar = screen.getByText('A');
       expect(avatar.className).not.toContain('ring-2');
       expect(avatar.className).not.toContain('ring-voice-speaking');
-    });
-
-    it('applies pulse animation when speaking and no reduced motion', () => {
-      useVoiceStore.setState({ speakingUsers: new Set(['user-1']) });
-      mockMatchMedia.mockReturnValue({ matches: false });
-
-      render(<VoiceParticipant userId="user-1" />);
-
-      const avatar = screen.getByText('A');
-      expect(avatar.className).toContain('animate-speakingPulse');
-    });
-
-    it('does not apply pulse animation when prefers-reduced-motion is set', () => {
-      useVoiceStore.setState({ speakingUsers: new Set(['user-1']) });
-      mockMatchMedia.mockReturnValue({ matches: true });
-
-      render(<VoiceParticipant userId="user-1" />);
-
-      const avatar = screen.getByText('A');
       expect(avatar.className).not.toContain('animate-speakingPulse');
-      // Still shows the static ring
-      expect(avatar.className).toContain('ring-2');
-      expect(avatar.className).toContain('ring-voice-speaking');
     });
+
+    // prefers-reduced-motion is handled via CSS @media rule in globals.css
+    // which sets animation: none on .animate-speakingPulse — no JS check needed
   });
 
   describe('ARIA label', () => {

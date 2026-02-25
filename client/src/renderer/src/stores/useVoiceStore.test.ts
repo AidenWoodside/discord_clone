@@ -298,6 +298,18 @@ describe('useVoiceStore', () => {
 
       expect(useVoiceStore.getState().channelParticipants.has('ch-1')).toBe(false);
     });
+
+    it('clears departed user from speakingUsers', () => {
+      useVoiceStore.setState({
+        channelParticipants: new Map([['ch-1', ['user-1', 'user-2']]]),
+        speakingUsers: new Set(['user-1', 'user-2']),
+      });
+
+      useVoiceStore.getState().removePeer('ch-1', 'user-1');
+
+      expect(useVoiceStore.getState().speakingUsers.has('user-1')).toBe(false);
+      expect(useVoiceStore.getState().speakingUsers.has('user-2')).toBe(true);
+    });
   });
 
   describe('setSpeaking', () => {
@@ -344,6 +356,19 @@ describe('useVoiceStore', () => {
       expect(vadService.stopLocalVAD).toHaveBeenCalled();
     });
 
+    it('restarts local VAD when unmuting with active stream', () => {
+      const mockStream = {} as MediaStream;
+      vi.mocked(mediaService.getLocalStream).mockReturnValue(mockStream);
+      useVoiceStore.setState({ isMuted: true, currentUserId: 'my-user' });
+
+      useVoiceStore.getState().toggleMute();
+
+      expect(vadService.startLocalVAD).toHaveBeenCalledWith(
+        mockStream,
+        expect.any(Function),
+      );
+    });
+
     it('clears self from speakingUsers when muting', () => {
       useVoiceStore.setState({
         currentUserId: 'my-user',
@@ -369,10 +394,36 @@ describe('useVoiceStore', () => {
       expect(mediaService.deafenAudio).toHaveBeenCalled();
     });
 
-    it('calls mediaService.undeafenAudio when undeafening', () => {
-      useVoiceStore.setState({ isDeafened: true, isMuted: true });
-      useVoiceStore.getState().toggleDeafen();
-      expect(mediaService.undeafenAudio).toHaveBeenCalled();
+    it('calls undeafenAudio with restoreMuted=false when was not muted before deafen', () => {
+      useVoiceStore.setState({ isMuted: false, currentUserId: 'my-user' });
+      useVoiceStore.getState().toggleDeafen(); // ON: wasMutedBeforeDeafen = false
+      vi.clearAllMocks();
+
+      useVoiceStore.getState().toggleDeafen(); // OFF
+      expect(mediaService.undeafenAudio).toHaveBeenCalledWith(false);
+    });
+
+    it('calls undeafenAudio with restoreMuted=true when was muted before deafen', () => {
+      useVoiceStore.setState({ isMuted: true, currentUserId: 'my-user' });
+      useVoiceStore.getState().toggleDeafen(); // ON: wasMutedBeforeDeafen = true
+      vi.clearAllMocks();
+
+      useVoiceStore.getState().toggleDeafen(); // OFF
+      expect(mediaService.undeafenAudio).toHaveBeenCalledWith(true);
+    });
+
+    it('restarts local VAD when undeafening and was not muted before', () => {
+      const mockStream = {} as MediaStream;
+      vi.mocked(mediaService.getLocalStream).mockReturnValue(mockStream);
+      useVoiceStore.setState({ isMuted: false, currentUserId: 'my-user' });
+      useVoiceStore.getState().toggleDeafen(); // ON
+      vi.clearAllMocks();
+
+      useVoiceStore.getState().toggleDeafen(); // OFF
+      expect(vadService.startLocalVAD).toHaveBeenCalledWith(
+        mockStream,
+        expect.any(Function),
+      );
     });
 
     it('sets isMuted to true when deafening', () => {

@@ -3,11 +3,13 @@ import { ChevronDown, Plus, UserPlus } from 'lucide-react';
 import useAuthStore from '../../stores/useAuthStore';
 import { DropdownMenu, DropdownMenuItem } from '../../components';
 import { CreateChannelModal } from './CreateChannelModal';
+import { InviteModal } from './InviteModal';
 
 export function ServerHeader(): React.ReactNode {
   const user = useAuthStore((s) => s.user);
   const isOwner = user?.role === 'owner';
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
 
   if (!isOwner) {
     return (
@@ -33,7 +35,7 @@ export function ServerHeader(): React.ReactNode {
             <span>Create Channel</span>
           </div>
         </DropdownMenuItem>
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem onSelect={() => setInviteModalOpen(true)}>
           <div className="flex items-center gap-2">
             <UserPlus size={16} />
             <span>Invite People</span>
@@ -42,6 +44,7 @@ export function ServerHeader(): React.ReactNode {
       </DropdownMenu>
 
       <CreateChannelModal open={createModalOpen} onOpenChange={setCreateModalOpen} />
+      <InviteModal open={inviteModalOpen} onOpenChange={setInviteModalOpen} />
     </>
   );
 }

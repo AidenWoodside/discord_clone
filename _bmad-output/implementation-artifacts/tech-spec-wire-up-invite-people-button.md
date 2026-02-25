@@ -2,7 +2,7 @@
 title: 'Wire Up Invite People Button'
 slug: 'wire-up-invite-people-button'
 created: '2026-02-25'
-status: 'ready-for-dev'
+status: 'implementation-complete'
 stepsCompleted: [1, 2, 3, 4]
 tech_stack: ['React 18+', 'TypeScript 5.x strict', 'Zustand v5.0.x', 'Radix UI Dialog', 'Tailwind CSS', 'Vitest', 'React Testing Library']
 files_to_modify: ['shared/src/types.ts', 'client/src/renderer/src/stores/useInviteStore.ts (new)', 'client/src/renderer/src/features/channels/InviteModal.tsx (new)', 'client/src/renderer/src/features/channels/ServerHeader.tsx']
@@ -85,7 +85,7 @@ Create a full invite management modal wired to the existing backend. The modal l
 
 ### Tasks
 
-- [ ] Task 1: Fix shared `Invite` type
+- [x] Task 1: Fix shared `Invite` type
   - File: `shared/src/types.ts`
   - Action: Replace the stale `Invite` interface (lines 42-51) with one matching the backend GET `/api/invites` response shape:
     ```typescript
@@ -99,7 +99,7 @@ Create a full invite management modal wired to the existing backend. The modal l
     ```
   - Notes: Backend returns camelCase in API response (see `inviteRoutes.ts` line 72-78). The `revoked` field is needed for client-side filtering of active invites.
 
-- [ ] Task 2: Create `useInviteStore` Zustand store
+- [x] Task 2: Create `useInviteStore` Zustand store
   - File: `client/src/renderer/src/stores/useInviteStore.ts` **(new)**
   - Action: Create a Zustand store following `useChannelStore` pattern with:
     - State: `invites: Invite[]`, `isLoading: boolean`, `error: string | null`
@@ -109,7 +109,7 @@ Create a full invite management modal wired to the existing backend. The modal l
     - `clearError()`: resets error to null
   - Notes: Import `Invite` from `discord-clone-shared`. Import `apiRequest` from `../services/apiClient`. `apiRequest` already unwraps `{ data }` and throws with error message. For list endpoint, `apiRequest` returns the array directly (apiClient unwraps `data` from `{ data: [...], count }`? — **verify**: actually `apiRequest` returns `body.data` which for the list endpoint is the array, `count` is lost — that's fine, we just need the array).
 
-- [ ] Task 3: Create `InviteModal` component
+- [x] Task 3: Create `InviteModal` component
   - File: `client/src/renderer/src/features/channels/InviteModal.tsx` **(new)**
   - Action: Create modal component with props `{ open: boolean, onOpenChange: (open: boolean) => void }` following `CreateChannelModal` pattern:
     - On open (`useEffect` on `open`): call `fetchInvites()` from store
@@ -120,7 +120,7 @@ Create a full invite management modal wired to the existing backend. The modal l
     - **Empty state**: "No active invites. Generate one above."
   - Notes: Use `Modal`, `Button` from `../../components`. Use lucide-react icons: `Copy`, `Trash2`, `Link`. Width: `w-[480px]` to accommodate invite rows.
 
-- [ ] Task 4: Wire "Invite People" dropdown in `ServerHeader`
+- [x] Task 4: Wire "Invite People" dropdown in `ServerHeader`
   - File: `client/src/renderer/src/features/channels/ServerHeader.tsx`
   - Action:
     1. Add `import { InviteModal } from './InviteModal';`
@@ -129,7 +129,7 @@ Create a full invite management modal wired to the existing backend. The modal l
     4. Add `<InviteModal open={inviteModalOpen} onOpenChange={setInviteModalOpen} />` alongside the existing `<CreateChannelModal />` render
   - Notes: Minimal change — follows the exact same pattern as the Create Channel item above it.
 
-- [ ] Task 5: Write store tests
+- [x] Task 5: Write store tests
   - File: `client/src/renderer/src/stores/useInviteStore.test.ts` **(new)**
   - Action: Test all store actions:
     - `fetchInvites`: mock `apiRequest` → verify `invites` populated with only non-revoked items, `isLoading` transitions, error handling
@@ -138,7 +138,7 @@ Create a full invite management modal wired to the existing backend. The modal l
     - `clearError`: verify error reset to null
   - Notes: Mock `../services/apiClient` module via `vi.mock`. Reset store between tests via `useInviteStore.setState`.
 
-- [ ] Task 6: Write component tests
+- [x] Task 6: Write component tests
   - File: `client/src/renderer/src/features/channels/InviteModal.test.tsx` **(new)**
   - Action: Test modal behavior:
     - Renders modal with title when `open={true}`
@@ -153,14 +153,14 @@ Create a full invite management modal wired to the existing backend. The modal l
 
 ### Acceptance Criteria
 
-- [ ] AC1: Given I am the server owner, when I click the server name dropdown and select "Invite People", then the Invite modal opens showing a list of active invites
-- [ ] AC2: Given the Invite modal is open, when I click "Generate Invite Link", then a new invite is created and the invite link is automatically copied to my clipboard with "Copied!" visual feedback
-- [ ] AC3: Given the Invite modal shows active invites, when I click "Copy" on an invite row, then that invite's link is copied to my clipboard with "Copied!" feedback
-- [ ] AC4: Given the Invite modal shows active invites, when I click "Revoke" on an invite row, then that invite is revoked and removed from the list
-- [ ] AC5: Given the Invite modal is open and there are no active invites, then an empty state message "No active invites. Generate one above." is displayed
-- [ ] AC6: Given a network error occurs during any invite operation, then an error message is displayed in the modal
-- [ ] AC7: Given I am NOT the server owner, then the "Invite People" dropdown item is not visible (existing behavior — ServerHeader only renders dropdown for owners)
-- [ ] AC8: Given the `Invite` type in `shared/src/types.ts`, then it matches the backend API response shape: `{ id, token, createdBy, revoked, createdAt }`
+- [x] AC1: Given I am the server owner, when I click the server name dropdown and select "Invite People", then the Invite modal opens showing a list of active invites
+- [x] AC2: Given the Invite modal is open, when I click "Generate Invite Link", then a new invite is created and the invite link is automatically copied to my clipboard with "Copied!" visual feedback
+- [x] AC3: Given the Invite modal shows active invites, when I click "Copy" on an invite row, then that invite's link is copied to my clipboard with "Copied!" feedback
+- [x] AC4: Given the Invite modal shows active invites, when I click "Revoke" on an invite row, then that invite is revoked and removed from the list
+- [x] AC5: Given the Invite modal is open and there are no active invites, then an empty state message "No active invites. Generate one above." is displayed
+- [x] AC6: Given a network error occurs during any invite operation, then an error message is displayed in the modal
+- [x] AC7: Given I am NOT the server owner, then the "Invite People" dropdown item is not visible (existing behavior — ServerHeader only renders dropdown for owners)
+- [x] AC8: Given the `Invite` type in `shared/src/types.ts`, then it matches the backend API response shape: `{ id, token, createdBy, revoked, createdAt }`
 
 ## Additional Context
 

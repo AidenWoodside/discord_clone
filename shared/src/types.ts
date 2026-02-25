@@ -41,12 +41,9 @@ export interface Session {
 
 export interface Invite {
   id: string;
-  serverId: string;
-  creatorId: string;
-  code: string;
-  maxUses?: number;
-  uses: number;
-  expiresAt?: string;
+  token: string;
+  createdBy: string;
+  revoked: boolean;
   createdAt: string;
 }
 

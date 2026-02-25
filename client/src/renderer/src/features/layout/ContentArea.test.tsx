@@ -10,7 +10,7 @@ import { useMemberStore } from '../../stores/useMemberStore';
 
 const { mockFetchMessages, mockFetchOlderMessages } = vi.hoisted(() => ({
   mockFetchMessages: vi.fn(),
-  mockFetchOlderMessages: vi.fn(),
+  mockFetchOlderMessages: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock messageService
@@ -357,6 +357,52 @@ describe('ContentArea', () => {
       expect(screen.queryByText('New messages')).not.toBeInTheDocument();
     });
 
+    it('scrolls to bottom and hides indicator when "New messages" is clicked', async () => {
+      useMessageStore.setState({
+        messages: new Map([
+          ['ch-1', [
+            { id: 'msg-1', channelId: 'ch-1', authorId: 'user-1', content: 'Existing', createdAt: '2024-01-01T12:00:00Z', status: 'sent' as const },
+          ]],
+        ]),
+        isLoading: false,
+      });
+
+      renderContentArea('ch-1');
+
+      await waitFor(() => {
+        expect(screen.getByText('Existing')).toBeInTheDocument();
+      });
+
+      // Simulate user scrolled up
+      const scrollEl = screen.getByRole('log');
+      Object.defineProperty(scrollEl, 'scrollHeight', { value: 1000, configurable: true });
+      Object.defineProperty(scrollEl, 'scrollTop', { value: 0, configurable: true, writable: true });
+      Object.defineProperty(scrollEl, 'clientHeight', { value: 500, configurable: true });
+      scrollEl.scrollTo = vi.fn();
+
+      // Fire scroll event to set isAtBottom = false
+      scrollEl.dispatchEvent(new Event('scroll'));
+
+      // New message arrives while scrolled up
+      useMessageStore.setState({
+        messages: new Map([
+          ['ch-1', [
+            { id: 'msg-1', channelId: 'ch-1', authorId: 'user-1', content: 'Existing', createdAt: '2024-01-01T12:00:00Z', status: 'sent' as const },
+            { id: 'msg-2', channelId: 'ch-1', authorId: 'user-2', content: 'New msg', createdAt: '2024-01-01T12:05:00Z', status: 'sent' as const },
+          ]],
+        ]),
+      });
+
+      const indicator = await screen.findByLabelText('Jump to new messages');
+      const user = userEvent.setup();
+      await user.click(indicator);
+
+      expect(scrollEl.scrollTo).toHaveBeenCalledWith(
+        expect.objectContaining({ behavior: 'smooth' }),
+      );
+      expect(screen.queryByLabelText('Jump to new messages')).not.toBeInTheDocument();
+    });
+
     it('shows "New messages" button with aria-label', async () => {
       useMessageStore.setState({
         messages: new Map([
@@ -398,6 +444,31 @@ describe('ContentArea', () => {
         expect(screen.getByLabelText('Jump to new messages')).toBeInTheDocument();
       });
     });
+  });
+
+  it('transitions from loading state to displaying messages with scroll container', async () => {
+    useMessageStore.setState({ isLoading: true });
+    renderContentArea('ch-1');
+    expect(screen.getByText('Loading messages...')).toBeInTheDocument();
+
+    // Simulate load complete with messages
+    useMessageStore.setState({
+      messages: new Map([
+        ['ch-1', [
+          { id: 'msg-1', channelId: 'ch-1', authorId: 'user-1', content: 'First message', createdAt: '2024-01-01T12:00:00Z', status: 'sent' as const },
+        ]],
+      ]),
+      isLoading: false,
+    });
+
+    await waitFor(() => {
+      const scrollEl = screen.getByRole('log');
+      expect(scrollEl).toBeInTheDocument();
+      expect(screen.getByText('First message')).toBeInTheDocument();
+    });
+
+    // Verify loading state is cleared
+    expect(screen.queryByText('Loading messages...')).not.toBeInTheDocument();
   });
 
   describe('loading older messages', () => {

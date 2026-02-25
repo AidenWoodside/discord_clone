@@ -56,6 +56,35 @@ export function sendMessage(channelId: string, plaintext: string): void {
 
 const PAGE_LIMIT = 50;
 
+async function fetchAndDecryptMessages(
+  channelId: string,
+  options?: { before?: string },
+): Promise<{ messages: DecryptedMessage[]; hasMore: boolean } | null> {
+  let url = `/api/channels/${encodeURIComponent(channelId)}/messages?limit=${PAGE_LIMIT}`;
+  if (options?.before) {
+    url += `&before=${encodeURIComponent(options.before)}`;
+  }
+
+  const result = await apiRequest<TextReceivePayload[]>(url);
+
+  const groupKey = useAuthStore.getState().groupKey;
+  if (!groupKey) return null;
+
+  const decrypted: DecryptedMessage[] = result.map((msg) => ({
+    id: msg.messageId,
+    channelId: msg.channelId,
+    authorId: msg.authorId,
+    content: decryptMessage(msg.content, msg.nonce, groupKey),
+    createdAt: msg.createdAt,
+    status: 'sent' as const,
+  }));
+
+  // API returns newest first — reverse for chronological display
+  decrypted.reverse();
+
+  return { messages: decrypted, hasMore: result.length === PAGE_LIMIT };
+}
+
 export async function fetchMessages(
   channelId: string,
   options?: { before?: string },
@@ -64,34 +93,14 @@ export async function fetchMessages(
   useMessageStore.getState().setError(null);
 
   try {
-    let url = `/api/channels/${channelId}/messages?limit=${PAGE_LIMIT}`;
-    if (options?.before) {
-      url += `&before=${options.before}`;
-    }
-
-    const result = await apiRequest<TextReceivePayload[]>(url);
-
-    const groupKey = useAuthStore.getState().groupKey;
-    if (!groupKey) {
+    const data = await fetchAndDecryptMessages(channelId, options);
+    if (!data) {
       useMessageStore.getState().setLoading(false);
       useMessageStore.getState().setError('Encryption key not available');
       return;
     }
 
-    const decrypted: DecryptedMessage[] = result.map((msg) => ({
-      id: msg.messageId,
-      channelId: msg.channelId,
-      authorId: msg.authorId,
-      content: decryptMessage(msg.content, msg.nonce, groupKey),
-      createdAt: msg.createdAt,
-      status: 'sent' as const,
-    }));
-
-    // API returns newest first — reverse for chronological display
-    decrypted.reverse();
-
-    const hasMore = result.length === PAGE_LIMIT;
-    useMessageStore.getState().setMessages(channelId, decrypted, hasMore);
+    useMessageStore.getState().setMessages(channelId, data.messages, data.hasMore);
     useMessageStore.getState().setLoading(false);
   } catch (err) {
     useMessageStore.getState().setLoading(false);
@@ -109,29 +118,13 @@ export async function fetchOlderMessages(channelId: string): Promise<void> {
   store.setLoadingMore(true);
 
   try {
-    const url = `/api/channels/${channelId}/messages?limit=${PAGE_LIMIT}&before=${oldestId}`;
-    const result = await apiRequest<TextReceivePayload[]>(url);
-
-    const groupKey = useAuthStore.getState().groupKey;
-    if (!groupKey) {
+    const data = await fetchAndDecryptMessages(channelId, { before: oldestId });
+    if (!data) {
       useMessageStore.getState().setLoadingMore(false);
       return;
     }
 
-    const decrypted: DecryptedMessage[] = result.map((msg) => ({
-      id: msg.messageId,
-      channelId: msg.channelId,
-      authorId: msg.authorId,
-      content: decryptMessage(msg.content, msg.nonce, groupKey),
-      createdAt: msg.createdAt,
-      status: 'sent' as const,
-    }));
-
-    // API returns newest first — reverse for chronological display
-    decrypted.reverse();
-
-    const hasMore = result.length === PAGE_LIMIT;
-    useMessageStore.getState().prependMessages(channelId, decrypted, hasMore);
+    useMessageStore.getState().prependMessages(channelId, data.messages, data.hasMore);
     useMessageStore.getState().setLoadingMore(false);
   } catch {
     useMessageStore.getState().setLoadingMore(false);

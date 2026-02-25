@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { ArrowDown, Hash, Loader2, Users } from 'lucide-react';
 import { useChannelStore } from '../../stores/useChannelStore';
@@ -32,6 +32,8 @@ export function ContentArea(): React.ReactNode {
   const isAtBottom = useRef(true);
   const prevMessageCount = useRef(0);
   const [hasNewMessages, setHasNewMessages] = useState(false);
+  const prevFirstMsgId = useRef<string | undefined>();
+  const loadingMoreRef = useRef(false);
 
   const messageGroups = useMemo(() => groupMessages(channelMessages), [channelMessages]);
 
@@ -42,6 +44,9 @@ export function ContentArea(): React.ReactNode {
       setHasNewMessages(false);
       isAtBottom.current = true;
       prevMessageCount.current = 0;
+      prevScrollHeight.current = 0;
+      prevFirstMsgId.current = undefined;
+      loadingMoreRef.current = false;
       fetchMessages(channelId);
     }
   }, [channelId, setActiveChannel, setCurrentChannel]);
@@ -82,21 +87,34 @@ export function ContentArea(): React.ReactNode {
     }
 
     // Infinite scroll-up: load older messages when near top
-    if (el.scrollTop < 100 && hasMore && !isLoadingMore && channelId) {
-      fetchOlderMessages(channelId);
+    // Uses ref guard (synchronous) instead of React state to prevent duplicate requests
+    if (el.scrollTop < 100 && hasMore && !loadingMoreRef.current && channelId) {
+      loadingMoreRef.current = true;
+      fetchOlderMessages(channelId).finally(() => {
+        loadingMoreRef.current = false;
+      });
     }
-  }, [hasMore, isLoadingMore, channelId]);
+  }, [hasMore, channelId]);
 
-  // Preserve scroll position after prepending older messages
+  // Preserve scroll position only after prepending older messages (not on append)
   const prevScrollHeight = useRef(0);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (prevScrollHeight.current > 0 && el.scrollHeight > prevScrollHeight.current) {
+
+    const firstMsgId = channelMessages.length > 0 ? channelMessages[0].id : undefined;
+    const wasPrepend =
+      prevFirstMsgId.current !== undefined &&
+      firstMsgId !== undefined &&
+      prevFirstMsgId.current !== firstMsgId;
+
+    if (wasPrepend && prevScrollHeight.current > 0 && el.scrollHeight > prevScrollHeight.current) {
       const delta = el.scrollHeight - prevScrollHeight.current;
       el.scrollTop += delta;
     }
+
     prevScrollHeight.current = el.scrollHeight;
+    prevFirstMsgId.current = firstMsgId;
   }, [channelMessages]);
 
   const scrollToBottom = useCallback(() => {

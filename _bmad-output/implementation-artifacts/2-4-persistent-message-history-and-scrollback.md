@@ -1,6 +1,6 @@
 # Story 2.4: Persistent Message History & Scrollback
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -357,14 +357,15 @@ No debug issues encountered. All tests passed on first run after implementation.
 ### Change Log
 
 - 2026-02-25: Implemented story 2-4 — persistent message history with cursor-based pagination, infinite scroll-up, auto-scroll, and new messages indicator. 23 new tests added.
+- 2026-02-25: Code review fixes (8 issues) — Fixed scroll preservation to only trigger on prepend (was firing on ALL message changes, violating AC 3). Fixed prevScrollHeight/prevFirstMsgId not reset on channel switch. Replaced stale-closure isLoadingMore guard with synchronous ref guard to prevent duplicate pagination requests. Extracted shared fetchAndDecryptMessages helper to eliminate code duplication between fetchMessages and fetchOlderMessages. Added encodeURIComponent to URL params. Added 2 missing tests (indicator click + initial load transition). 287 client tests pass, 277 server tests pass, lint clean.
 
 ### File List
 
-- client/src/renderer/src/services/messageService.ts (modified — added cursor pagination to fetchMessages, added fetchOlderMessages)
+- client/src/renderer/src/services/messageService.ts (modified — added cursor pagination to fetchMessages, added fetchOlderMessages; review: extracted fetchAndDecryptMessages helper, added encodeURIComponent)
 - client/src/renderer/src/stores/useMessageStore.ts (modified — added hasMoreMessages, isLoadingMore, prependMessages, getOldestMessageId, setLoadingMore, updated setMessages)
-- client/src/renderer/src/features/layout/ContentArea.tsx (modified — added scroll tracking, auto-scroll, new messages indicator, infinite scroll-up, loading spinner, beginning-of-channel message)
+- client/src/renderer/src/features/layout/ContentArea.tsx (modified — added scroll tracking, auto-scroll, new messages indicator, infinite scroll-up, loading spinner, beginning-of-channel message; review: fixed scroll preservation to prepend-only via useLayoutEffect + first-msg-id tracking, added ref-based pagination guard, reset refs on channel switch)
 - client/src/renderer/src/services/messageService.test.ts (modified — added 9 pagination and fetchOlderMessages tests)
 - client/src/renderer/src/stores/useMessageStore.test.ts (modified — added 9 store pagination tests)
-- client/src/renderer/src/features/layout/ContentArea.test.tsx (modified — added 5 scroll behavior and indicator tests)
-- _bmad-output/implementation-artifacts/sprint-status.yaml (modified — status updated to review)
-- _bmad-output/implementation-artifacts/2-4-persistent-message-history-and-scrollback.md (modified — tasks marked complete, Dev Agent Record populated)
+- client/src/renderer/src/features/layout/ContentArea.test.tsx (modified — added 5 scroll behavior and indicator tests; review: added 2 tests for indicator click + initial load transition, fixed mock to return Promise)
+- _bmad-output/implementation-artifacts/sprint-status.yaml (modified — status updated to done)
+- _bmad-output/implementation-artifacts/2-4-persistent-message-history-and-scrollback.md (modified — tasks marked complete, Dev Agent Record populated, review fixes documented)

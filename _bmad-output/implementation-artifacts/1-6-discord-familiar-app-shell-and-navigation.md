@@ -1,6 +1,6 @@
 # Story 1.6: Discord-Familiar App Shell & Navigation
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -621,6 +621,7 @@ Claude Opus 4.6
 ### Change Log
 
 - 2026-02-24: Implemented story 1-6 — Discord-familiar three-column app shell with channel sidebar, content area, member list, REST endpoints, Zustand stores, routing, responsive behavior, accessibility, and comprehensive tests
+- 2026-02-24: Code review — Fixed 10 issues (2 HIGH, 5 MEDIUM, 3 LOW). All ACs verified as implemented. All tasks verified as done. Status → done
 
 ### File List
 
@@ -640,8 +641,11 @@ Claude Opus 4.6
 - client/src/renderer/src/features/layout/AppLayout.tsx
 - client/src/renderer/src/features/layout/AppLayout.test.tsx
 - client/src/renderer/src/features/layout/ContentArea.tsx
+- client/src/renderer/src/features/layout/ContentArea.test.tsx (added in review)
 - client/src/renderer/src/features/layout/UserPanel.tsx
+- client/src/renderer/src/features/layout/UserPanel.test.tsx (added in review)
 - client/src/renderer/src/features/layout/ChannelRedirect.tsx
+- client/src/renderer/src/features/layout/ChannelRedirect.test.tsx (added in review)
 - client/src/renderer/src/features/channels/ChannelSidebar.tsx
 - client/src/renderer/src/features/channels/ChannelSidebar.test.tsx
 - client/src/renderer/src/features/channels/ChannelItem.tsx
@@ -649,6 +653,7 @@ Claude Opus 4.6
 - client/src/renderer/src/features/members/MemberList.tsx
 - client/src/renderer/src/features/members/MemberList.test.tsx
 - client/src/renderer/src/features/members/MemberItem.tsx
+- client/src/renderer/src/utils/avatarColor.ts (added in review — extracted shared utility)
 
 **Modified files:**
 - server/src/app.ts — Registered channels and users plugins
@@ -658,3 +663,48 @@ Claude Opus 4.6
 - client/src/renderer/src/globals.css — Added border-default color token
 - client/vitest.setup.ts — Added ResizeObserver polyfill for jsdom
 - client/package.json — Added lucide-react and @testing-library/user-event dependencies
+- client/src/renderer/src/services/apiClient.ts — Wrapped API errors in proper Error instances (review fix)
+- server/src/plugins/channels/channelRoutes.ts — Added required fields to response schema (review fix)
+- server/src/plugins/users/userRoutes.ts — Added required fields to response schema (review fix)
+
+## Senior Developer Review (AI)
+
+**Reviewer:** Claude Opus 4.6
+**Date:** 2026-02-24
+**Outcome:** Approved — all issues fixed
+
+### AC Verification
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC1 — Three-column layout | PASS | AppLayout.tsx — nav(240px) + main(flex-1) + aside(240px), earthy palette in globals.css |
+| AC2 — Channel sidebar | PASS | ChannelSidebar.tsx — server name, Hash icon for text, Volume2 for voice, UserPanel at bottom |
+| AC3 — Member list groups | PASS | MemberList.tsx — ONLINE/OFFLINE groups with counts, offline has opacity-60 |
+| AC4 — Channel click updates | PASS | ChannelItem.tsx navigates, ContentArea.tsx syncs URL → store, active state renders |
+| AC5 — Responsive collapse | PASS | AppLayout.tsx resize listener at 1000px, wasAutoCollapsed ref, toggle in ContentArea |
+| AC6 — Min window size | PASS | Already implemented in prior story — Electron main process minWidth: 960, minHeight: 540 |
+| AC7 — Semantic HTML + a11y | PASS | nav/main/aside with aria-labels, button elements, aria-current, focus-visible rings |
+
+### Issues Found and Fixed
+
+**HIGH (2):**
+1. **H1: API errors thrown as plain objects** — `apiClient.ts` threw `body.error` (a `{code, message}` object), not an `Error` instance. Stores caught with `(err as Error).message` which worked by coincidence. **Fix:** Wrapped in `new Error(apiError.message)`.
+2. **H2: Local ChannelItem type duplicated shared Channel type** — `useChannelStore.ts` defined its own `ChannelItem` interface instead of deriving from shared. **Fix:** Replaced with `Pick<Channel, 'id' | 'name' | 'type' | 'createdAt'>` as `ChannelListItem`.
+
+**MEDIUM (5):**
+3. **M1: Duplicate getAvatarColor across components** — Identical function in `UserPanel.tsx` and `MemberItem.tsx`. **Fix:** Extracted to `utils/avatarColor.ts`, both components import from shared utility.
+4. **M2: Voice channel click set misleading active state** — Clicking voice channel called `setActiveChannel` but didn't navigate, creating split state. **Fix:** Voice channel click is now a true no-op.
+5. **M3: Double setActiveChannel on text channel click** — ChannelItem called `setActiveChannel` via onClick, then ContentArea's useEffect called it again from URL params. **Fix:** Removed onClick prop from ChannelItem; ContentArea's useEffect is now the single writer.
+6. **M4: No voice channel test coverage** — All ChannelItem tests used `type: 'text'`. **Fix:** Added tests for voice channel no-navigation and rendering.
+7. **M5: Missing required fields in Fastify response schemas** — Response schemas lacked `required` arrays. **Fix:** Added `required` to both channelRoutes.ts and userRoutes.ts schemas.
+
+**LOW (3):**
+8. **L1: Dead bg-bg-active CSS class on MemberItem avatar** — Inline `backgroundColor` style overrode the Tailwind class. **Fix:** Removed dead class.
+9. **L2: ServerHeader.tsx listed in spec but inlined** — Not a code issue, component is inline in ChannelSidebar.tsx. No fix needed.
+10. **L3: Missing tests for ContentArea, UserPanel, ChannelRedirect** — **Fix:** Added 3 new test files (15 total new tests).
+
+### Test Results After Review Fixes
+
+- **Server:** 11 test files, 109 tests passed
+- **Client:** 12 test files, 58 tests passed
+- **Lint:** 0 errors

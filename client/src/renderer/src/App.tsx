@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router';
 import { Tooltip as RadixTooltip } from 'radix-ui';
 import { LoginPage } from './features/auth/LoginPage';
 import { RegisterPage } from './features/auth/RegisterPage';
+import { SetupPage } from './features/auth/SetupPage';
 import { AuthGuard } from './features/auth/AuthGuard';
 import { AppLayout } from './features/layout/AppLayout';
 import { ContentArea } from './features/layout/ContentArea';
@@ -25,6 +26,7 @@ function App(): React.ReactNode {
       <HashRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/setup" element={<SetupPage />} />
           <Route path="/register/:token" element={<RegisterPage />} />
           <Route path="/app" element={<AuthGuard />}>
             <Route element={<AppLayout />}>

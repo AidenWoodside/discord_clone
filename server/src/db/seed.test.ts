@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { eq } from 'drizzle-orm';
 
 vi.hoisted(() => {
   process.env.JWT_ACCESS_SECRET = 'test-secret-key-for-testing';
@@ -9,7 +8,7 @@ vi.hoisted(() => {
 import { createDatabase } from './connection.js';
 import { runMigrations } from './migrate.js';
 import { runSeed } from './seed.js';
-import { users, channels } from './schema.js';
+import { channels } from './schema.js';
 import type { AppDatabase } from './connection.js';
 
 function setupTestDb(): AppDatabase {
@@ -25,23 +24,7 @@ describe('runSeed', () => {
     db = setupTestDb();
   });
 
-  it('should create owner account with correct credentials on first run', async () => {
-    vi.stubEnv('OWNER_USERNAME', 'testadmin');
-    vi.stubEnv('OWNER_PASSWORD', 'testpassword123');
-
-    await runSeed(db);
-
-    const owner = db.select().from(users).where(eq(users.role, 'owner')).get();
-    expect(owner).toBeDefined();
-    expect(owner!.username).toBe('testadmin');
-    expect(owner!.password_hash).toMatch(/^\$2b\$12\$/);
-    expect(owner!.role).toBe('owner');
-  });
-
-  it('should seed default channels on first run', async () => {
-    vi.stubEnv('OWNER_USERNAME', 'testadmin');
-    vi.stubEnv('OWNER_PASSWORD', 'testpassword123');
-
+  it('should seed default channels on empty database', async () => {
     await runSeed(db);
 
     const allChannels = db.select().from(channels).all();
@@ -56,42 +39,30 @@ describe('runSeed', () => {
     expect(gaming!.type).toBe('voice');
   });
 
-  it('should skip seeding when owner already exists', async () => {
-    vi.stubEnv('OWNER_USERNAME', 'testadmin');
-    vi.stubEnv('OWNER_PASSWORD', 'testpassword123');
-
-    // First seed
+  it('should be idempotent (running twice does not duplicate channels)', async () => {
+    await runSeed(db);
     await runSeed(db);
 
-    // Verify initial state
-    const ownersBefore = db.select().from(users).where(eq(users.role, 'owner')).all();
-    expect(ownersBefore).toHaveLength(1);
-
-    // Second seed should be a no-op
-    await runSeed(db);
-
-    const ownersAfter = db.select().from(users).where(eq(users.role, 'owner')).all();
-    expect(ownersAfter).toHaveLength(1);
-
-    // Channels should still be 2 (not doubled)
     const allChannels = db.select().from(channels).all();
     expect(allChannels).toHaveLength(2);
   });
 
-  it('should skip when env vars are missing and log warning', async () => {
-    vi.stubEnv('OWNER_USERNAME', '');
-    vi.stubEnv('OWNER_PASSWORD', '');
+  it('should skip seeding when channels already exist', async () => {
+    // Manually insert a channel
+    db.insert(channels).values({ name: 'existing', type: 'text' }).run();
 
-    const warnMessages: string[] = [];
+    const infoMessages: string[] = [];
     const logger = {
-      info: () => {},
-      warn: (msg: string) => { warnMessages.push(msg); },
+      info: (msg: string) => { infoMessages.push(msg); },
+      warn: () => {},
     };
 
     await runSeed(db, logger);
 
-    const allUsers = db.select().from(users).all();
-    expect(allUsers).toHaveLength(0);
-    expect(warnMessages.length).toBeGreaterThan(0);
+    // Should not have added default channels
+    const allChannels = db.select().from(channels).all();
+    expect(allChannels).toHaveLength(1);
+    expect(allChannels[0].name).toBe('existing');
+    expect(infoMessages).toContain('Seeding skipped — channels already exist');
   });
 });

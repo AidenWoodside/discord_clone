@@ -1,34 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button, Input } from '../../components';
 import useAuthStore from '../../stores/useAuthStore';
 
-export function LoginPage(): React.ReactNode {
+export function SetupPage(): React.ReactNode {
+  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const navigate = useNavigate();
-  const { login, isLoading, error, clearError, checkServerStatus, needsSetup } = useAuthStore();
+  const { setup, isLoading, error, clearError } = useAuthStore();
 
-  useEffect(() => {
-    checkServerStatus();
-  }, [checkServerStatus]);
-
-  useEffect(() => {
-    if (needsSetup) {
-      navigate('/setup');
-    }
-  }, [needsSetup, navigate]);
-
-  const canSubmit = username.trim().length > 0 && password.length > 0 && !isLoading;
+  const canSubmit = username.trim().length > 0 && password.length >= 8 && !isLoading;
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (!canSubmit) return;
 
     clearError();
-    await login(username, password);
+    await setup(username, password);
 
-    // Check if login succeeded (user is now set)
     const { user } = useAuthStore.getState();
     if (user) {
       navigate('/app');
@@ -38,7 +27,8 @@ export function LoginPage(): React.ReactNode {
   return (
     <div className="flex h-screen items-center justify-center bg-bg-primary">
       <div className="w-full max-w-sm rounded-lg bg-bg-secondary p-8 shadow-lg">
-        <h1 className="mb-6 text-center text-2xl font-bold text-text-primary">Welcome Back</h1>
+        <h1 className="mb-2 text-center text-2xl font-bold text-text-primary">Server Setup</h1>
+        <p className="mb-6 text-center text-sm text-text-muted">Create the owner account to get started.</p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Input
@@ -46,7 +36,7 @@ export function LoginPage(): React.ReactNode {
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="Enter your username"
+            placeholder="Choose a username"
             autoFocus
             autoComplete="username"
           />
@@ -56,9 +46,13 @@ export function LoginPage(): React.ReactNode {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter your password"
-            autoComplete="current-password"
+            placeholder="Choose a password"
+            autoComplete="new-password"
           />
+
+          {password.length > 0 && password.length < 8 && (
+            <p className="text-sm text-text-muted">Password must be at least 8 characters.</p>
+          )}
 
           {error && (
             <p className="text-sm text-status-dnd">{error}</p>
@@ -70,7 +64,7 @@ export function LoginPage(): React.ReactNode {
             disabled={!canSubmit}
             className={!canSubmit ? 'opacity-50 cursor-not-allowed' : ''}
           >
-            {isLoading ? 'Logging in...' : 'Log In'}
+            {isLoading ? 'Setting up...' : 'Create Owner Account'}
           </Button>
         </form>
       </div>

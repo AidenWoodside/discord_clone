@@ -1,7 +1,8 @@
 import fp from 'fastify-plugin';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { users, invites, bans } from '../../db/schema.js';
+import { users, invites, bans, channels } from '../../db/schema.js';
+import { count } from 'drizzle-orm';
 import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken, hashToken, verifyRefreshToken } from './authService.js';
 import { validateInvite } from '../invites/inviteService.js';
 import { createSession, findSessionByTokenHash, deleteSession, cleanExpiredSessions } from './sessionService.js';
@@ -12,7 +13,7 @@ import { X25519_PUBLIC_KEY_BYTES } from 'discord-clone-shared';
 interface RegisterBody {
   username: string;
   password: string;
-  inviteToken: string;
+  inviteToken?: string;
   publicKey?: string;
 }
 
@@ -47,12 +48,19 @@ export default fp(async (fastify: FastifyInstance) => {
     await initializeSodium();
   });
 
+  // GET /api/server/status — PUBLIC
+  fastify.get('/api/server/status', async (_request, reply) => {
+    const result = fastify.db.select({ value: count() }).from(users).get();
+    const userCount = result?.value ?? 0;
+    return reply.status(200).send({ data: { needsSetup: userCount === 0 } });
+  });
+
   // POST /api/auth/register — PUBLIC
   fastify.post<{ Body: RegisterBody }>('/api/auth/register', {
     schema: {
       body: {
         type: 'object',
-        required: ['username', 'password', 'inviteToken'],
+        required: ['username', 'password'],
         properties: {
           username: { type: 'string', minLength: 1, maxLength: 32 },
           password: { type: 'string', minLength: 8, maxLength: 72 },
@@ -89,15 +97,29 @@ export default fp(async (fastify: FastifyInstance) => {
       }
     }
 
-    // 1. Validate invite token (using shared service — no duplicated logic)
-    const inviteResult = validateInvite(fastify.db, inviteToken);
-    if (!inviteResult.valid) {
-      return reply.status(400).send({
-        error: {
-          code: 'INVALID_INVITE',
-          message: 'This invite is no longer valid. Ask the server owner for a new one.',
-        },
-      });
+    // Check if this is the first-user setup (no users exist yet)
+    const userCountResult = fastify.db.select({ value: count() }).from(users).get();
+    const isSetup = (userCountResult?.value ?? 0) === 0;
+
+    // 1. Validate invite token (skip for first-user setup)
+    if (!isSetup) {
+      if (!inviteToken) {
+        return reply.status(400).send({
+          error: {
+            code: 'INVALID_INVITE',
+            message: 'This invite is no longer valid. Ask the server owner for a new one.',
+          },
+        });
+      }
+      const inviteResult = validateInvite(fastify.db, inviteToken);
+      if (!inviteResult.valid) {
+        return reply.status(400).send({
+          error: {
+            code: 'INVALID_INVITE',
+            message: 'This invite is no longer valid. Ask the server owner for a new one.',
+          },
+        });
+      }
     }
 
     // 2. Hash password before entering transaction (async, yields event loop)
@@ -112,6 +134,15 @@ export default fp(async (fastify: FastifyInstance) => {
 
     // 4. All DB mutations in a transaction for atomicity
     const result = fastify.db.transaction((tx) => {
+      // Re-check user count inside transaction for race condition safety
+      const innerCount = tx.select({ value: count() }).from(users).get();
+      const isSetupInner = (innerCount?.value ?? 0) === 0;
+
+      // If outer check said setup but another request already created the first user
+      if (isSetup && !isSetupInner) {
+        return { error: 'SETUP_RACE' } as const;
+      }
+
       // 4a. Check bans (lightweight username-based check)
       const bannedUser = tx
         .select({ userId: bans.user_id })
@@ -142,18 +173,29 @@ export default fp(async (fastify: FastifyInstance) => {
           .values({
             username,
             password_hash: passwordHash,
-            role: 'user',
+            role: isSetupInner ? 'owner' : 'user',
             public_key: publicKey ?? null,
             encrypted_group_key: encryptedGroupKey,
           })
           .returning()
           .get();
 
-        // 4d. Revoke invite token (single-use)
-        tx.update(invites)
-          .set({ revoked: true })
-          .where(eq(invites.token, inviteToken))
-          .run();
+        if (isSetupInner) {
+          // Seed default channels during first-user setup
+          const existingChannels = tx.select({ value: count() }).from(channels).get();
+          if ((existingChannels?.value ?? 0) === 0) {
+            tx.insert(channels).values([
+              { name: 'general', type: 'text' },
+              { name: 'Gaming', type: 'voice' },
+            ]).run();
+          }
+        } else {
+          // 4d. Revoke invite token (single-use)
+          tx.update(invites)
+            .set({ revoked: true })
+            .where(eq(invites.token, inviteToken!))
+            .run();
+        }
 
         return { error: null, user: newUser } as const;
       } catch (err: unknown) {
@@ -163,6 +205,15 @@ export default fp(async (fastify: FastifyInstance) => {
         throw err;
       }
     });
+
+    if (result.error === 'SETUP_RACE') {
+      return reply.status(409).send({
+        error: {
+          code: 'SETUP_ALREADY_COMPLETED',
+          message: 'Server setup was already completed by another user.',
+        },
+      });
+    }
 
     if (result.error === 'REGISTRATION_BLOCKED') {
       return reply.status(403).send({

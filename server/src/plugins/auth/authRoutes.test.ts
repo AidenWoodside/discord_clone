@@ -10,7 +10,7 @@ vi.stubEnv('DATABASE_PATH', ':memory:');
 
 import { setupApp, seedOwner, seedInvite } from '../../test/helpers.js';
 import { hashPassword, generateRefreshToken, hashToken } from './authService.js';
-import { users, bans, invites, sessions } from '../../db/schema.js';
+import { users, bans, invites, sessions, channels } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import sodium from 'libsodium-wrappers';
 
@@ -111,6 +111,7 @@ describe('authRoutes', () => {
 
     it('should return 400 INVALID_INVITE for invalid invite token', async () => {
       app = await setupApp();
+      await seedOwner(app);
 
       const response = await app.inject({
         method: 'POST',
@@ -701,6 +702,183 @@ describe('authRoutes', () => {
 
       expect(refreshResponse.statusCode).toBe(401);
       expect(refreshResponse.json().error.code).toBe('INVALID_REFRESH_TOKEN');
+    });
+  });
+
+  describe('GET /api/server/status', () => {
+    it('should return needsSetup: true when no users exist', async () => {
+      app = await setupApp();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/server/status',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.needsSetup).toBe(true);
+    });
+
+    it('should return needsSetup: false when users exist', async () => {
+      app = await setupApp();
+      await seedOwner(app);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/server/status',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.needsSetup).toBe(false);
+    });
+
+    it('should not require authentication', async () => {
+      app = await setupApp();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/server/status',
+      });
+
+      // Should get 200, not 401 UNAUTHORIZED
+      expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe('First-user setup (register without invite)', () => {
+    it('should register first user as owner without invite token', async () => {
+      app = await setupApp();
+
+      await sodium.ready;
+      const keypair = sodium.crypto_box_keypair();
+      const publicKeyB64 = sodium.to_base64(keypair.publicKey);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'firstuser',
+          password: 'password123',
+          publicKey: publicKeyB64,
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.data.user.role).toBe('owner');
+      expect(body.data.user.username).toBe('firstuser');
+    });
+
+    it('should return encryptedGroupKey for first user', async () => {
+      app = await setupApp();
+
+      await sodium.ready;
+      const keypair = sodium.crypto_box_keypair();
+      const publicKeyB64 = sodium.to_base64(keypair.publicKey);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'firstuser',
+          password: 'password123',
+          publicKey: publicKeyB64,
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.data.encryptedGroupKey).toBeDefined();
+      expect(typeof body.data.encryptedGroupKey).toBe('string');
+
+      // Verify decryptable
+      const sealed = sodium.from_base64(body.data.encryptedGroupKey);
+      const decrypted = sodium.crypto_box_seal_open(sealed, keypair.publicKey, keypair.privateKey);
+      const expectedGroupKey = sodium.from_base64(process.env.GROUP_ENCRYPTION_KEY!);
+      expect(sodium.to_base64(decrypted)).toBe(sodium.to_base64(expectedGroupKey));
+    });
+
+    it('should create default channels during first-user setup', async () => {
+      app = await setupApp();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'firstuser',
+          password: 'password123',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+
+      const allChannels = app.db.select().from(channels).all();
+      expect(allChannels).toHaveLength(2);
+
+      const general = allChannels.find(c => c.name === 'general');
+      const gaming = allChannels.find(c => c.name === 'Gaming');
+      expect(general).toBeDefined();
+      expect(general!.type).toBe('text');
+      expect(gaming).toBeDefined();
+      expect(gaming!.type).toBe('voice');
+    });
+
+    it('should reject second user without invite token', async () => {
+      app = await setupApp();
+
+      // Register first user (becomes owner)
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'firstuser',
+          password: 'password123',
+        },
+      });
+
+      // Try to register second user without invite
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'seconduser',
+          password: 'password123',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe('INVALID_INVITE');
+    });
+
+    it('should allow second user with valid invite as role user', async () => {
+      app = await setupApp();
+
+      // Register first user (becomes owner)
+      const setupResponse = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'firstuser',
+          password: 'password123',
+        },
+      });
+      const ownerId = setupResponse.json().data.user.id;
+
+      // Create invite
+      seedInvite(app, ownerId);
+
+      // Register second user with invite
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'seconduser',
+          password: 'password123',
+          inviteToken: 'valid-invite-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json().data.user.role).toBe('user');
     });
   });
 });

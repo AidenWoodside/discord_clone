@@ -54,14 +54,22 @@ export function sendMessage(channelId: string, plaintext: string): void {
   }
 }
 
-export async function fetchMessages(channelId: string): Promise<void> {
+const PAGE_LIMIT = 50;
+
+export async function fetchMessages(
+  channelId: string,
+  options?: { before?: string },
+): Promise<void> {
   useMessageStore.getState().setLoading(true);
   useMessageStore.getState().setError(null);
 
   try {
-    const result = await apiRequest<TextReceivePayload[]>(
-      `/api/channels/${channelId}/messages`,
-    );
+    let url = `/api/channels/${channelId}/messages?limit=${PAGE_LIMIT}`;
+    if (options?.before) {
+      url += `&before=${options.before}`;
+    }
+
+    const result = await apiRequest<TextReceivePayload[]>(url);
 
     const groupKey = useAuthStore.getState().groupKey;
     if (!groupKey) {
@@ -82,12 +90,50 @@ export async function fetchMessages(channelId: string): Promise<void> {
     // API returns newest first — reverse for chronological display
     decrypted.reverse();
 
-    useMessageStore.getState().setMessages(channelId, decrypted);
+    const hasMore = result.length === PAGE_LIMIT;
+    useMessageStore.getState().setMessages(channelId, decrypted, hasMore);
     useMessageStore.getState().setLoading(false);
   } catch (err) {
     useMessageStore.getState().setLoading(false);
     useMessageStore.getState().setError(
       err instanceof Error ? err.message : 'Failed to load messages',
     );
+  }
+}
+
+export async function fetchOlderMessages(channelId: string): Promise<void> {
+  const store = useMessageStore.getState();
+  const oldestId = store.getOldestMessageId(channelId);
+  if (!oldestId) return;
+
+  store.setLoadingMore(true);
+
+  try {
+    const url = `/api/channels/${channelId}/messages?limit=${PAGE_LIMIT}&before=${oldestId}`;
+    const result = await apiRequest<TextReceivePayload[]>(url);
+
+    const groupKey = useAuthStore.getState().groupKey;
+    if (!groupKey) {
+      useMessageStore.getState().setLoadingMore(false);
+      return;
+    }
+
+    const decrypted: DecryptedMessage[] = result.map((msg) => ({
+      id: msg.messageId,
+      channelId: msg.channelId,
+      authorId: msg.authorId,
+      content: decryptMessage(msg.content, msg.nonce, groupKey),
+      createdAt: msg.createdAt,
+      status: 'sent' as const,
+    }));
+
+    // API returns newest first — reverse for chronological display
+    decrypted.reverse();
+
+    const hasMore = result.length === PAGE_LIMIT;
+    useMessageStore.getState().prependMessages(channelId, decrypted, hasMore);
+    useMessageStore.getState().setLoadingMore(false);
+  } catch {
+    useMessageStore.getState().setLoadingMore(false);
   }
 }

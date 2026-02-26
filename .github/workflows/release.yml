@@ -72,27 +72,27 @@ jobs:
 
             # Save current state for rollback
             PREV_COMMIT=$(git rev-parse HEAD)
-            CURRENT_IMAGE_ID=$(docker compose images app -q 2>/dev/null || echo "")
+            CURRENT_IMAGE_ID=$(sudo docker compose images app -q 2>/dev/null || echo "")
             if [ -n "$CURRENT_IMAGE_ID" ]; then
-              docker tag "$CURRENT_IMAGE_ID" app:rollback
+              sudo docker tag "$CURRENT_IMAGE_ID" app:rollback
               echo "Saved current image for rollback: $CURRENT_IMAGE_ID"
             fi
 
             # Deploy: pull latest code, rebuild, restart
             git pull origin main || { echo "DEPLOY FAILED — git pull failed"; exit 1; }
-            docker compose build app || {
+            sudo docker compose build app || {
               echo "DEPLOY FAILED — docker build failed. Reverting git..."
               git checkout "$PREV_COMMIT"
               exit 1
             }
-            docker compose up -d app
+            sudo docker compose up -d app
 
             # Health check: 30 attempts, 2s apart = 60s timeout
             echo "Waiting for health check..."
             for i in $(seq 1 30); do
               if curl -sf http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
                 echo "Deploy successful — health check passed on attempt $i"
-                docker rmi app:rollback 2>/dev/null || true
+                sudo docker rmi app:rollback 2>/dev/null || true
                 exit 0
               fi
               echo "Attempt $i/30 — waiting..."
@@ -102,11 +102,11 @@ jobs:
             # Health check failed — rollback
             echo "DEPLOY FAILED — health check timed out after 60s. Rolling back..."
             git checkout "$PREV_COMMIT"
-            if docker image inspect app:rollback > /dev/null 2>&1; then
+            if sudo docker image inspect app:rollback > /dev/null 2>&1; then
               COMPOSE_PROJECT=$(basename "$(pwd)")
-              docker tag app:rollback "${COMPOSE_PROJECT}-app:latest"
-              docker compose up -d --force-recreate app
-              docker rmi app:rollback 2>/dev/null || true
+              sudo docker tag app:rollback "${COMPOSE_PROJECT}-app:latest"
+              sudo docker compose up -d --force-recreate app
+              sudo docker rmi app:rollback 2>/dev/null || true
               echo "Rollback complete"
             else
               echo "No rollback image available (first deploy). Manual intervention required."

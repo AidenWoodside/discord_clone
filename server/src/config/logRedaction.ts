@@ -8,6 +8,7 @@ export const LOG_REDACT_CONFIG: LoggerOptions['redact'] = {
     'req.body.encrypted_content',
     'req.body.nonce',
     'encrypted_content',
+    'encryptedContent',
     'nonce',
     'password',
     'passwordHash',

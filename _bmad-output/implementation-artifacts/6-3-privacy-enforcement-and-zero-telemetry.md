@@ -1,6 +1,6 @@
 # Story 6.3: Privacy Enforcement & Zero Telemetry
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -307,11 +307,13 @@ Claude Opus 4.6
 
 - 2026-02-25: Implemented privacy enforcement and zero telemetry — added Pino redaction, CSP headers, CORS restriction, no-console ESLint rule, and 4 privacy audit test files (14 new tests)
 - 2026-02-25: Code review fixes (5 issues) — restricted CSP connect-src from wildcard wss:/ws: to specific server URLs, added transitive dependency audit via package-lock.json, extracted Pino redaction config to shared module, documented API_URL/WS_URL env vars, strengthened CORS test assertions
+- 2026-02-25: Code review #2 fixes (3 issues) — added top-level `encryptedContent` (camelCase) Pino redaction path, extracted CORS origin to shared config module (`corsConfig.ts`) with test importing it, improved outbound request scanner to full-content matching with dynamic import detection
 
 ### File List
 
-- `server/src/app.ts` — Modified: Pino redaction config imported from shared module, CORS restriction (`CLIENT_ORIGIN`), production log level default (`warn`)
-- `server/src/config/logRedaction.ts` — New: Shared Pino redaction config (17 sensitive field paths)
+- `server/src/app.ts` — Modified: Pino redaction config imported from shared module, CORS origin imported from shared config, production log level default (`warn`)
+- `server/src/config/logRedaction.ts` — New: Shared Pino redaction config (18 sensitive field paths, both casings of encryptedContent)
+- `server/src/config/corsConfig.ts` — New: Shared CORS origin config imported by app.ts and CORS test
 - `client/src/main/index.ts` — Modified: CSP enforcement via `session.defaultSession.webRequest.onHeadersReceived`, connect-src restricted to specific server URLs (no wildcard wss:/ws:)
 - `eslint.config.mjs` — Modified: Added `no-console: 'error'` rule for `server/src/**/*.ts`
 - `.env.example` — Modified: Added `LOG_LEVEL` production docs, `CLIENT_ORIGIN` config, `API_URL`/`WS_URL` Electron CSP docs

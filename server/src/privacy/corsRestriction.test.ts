@@ -1,20 +1,23 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
+import { CORS_ORIGIN } from '../config/corsConfig.js';
 
 /**
  * CORS Restriction: Verifies that CORS is restricted to configured client origin
  * and rejects requests from unknown origins.
+ *
+ * Uses the shared CORS_ORIGIN config from server/src/config/corsConfig.ts
+ * so this test validates the actual app configuration, not an independent copy.
  */
 
 describe('CORS Origin Restriction', () => {
-  const ALLOWED_ORIGIN = 'http://localhost:5173';
   let app: FastifyInstance;
 
   beforeEach(async () => {
     app = Fastify({ logger: false });
     await app.register(cors, {
-      origin: ALLOWED_ORIGIN,
+      origin: CORS_ORIGIN,
       credentials: true,
     });
     app.get('/api/test', async () => ({ data: { ok: true } }));
@@ -29,11 +32,11 @@ describe('CORS Origin Restriction', () => {
     const response = await app.inject({
       method: 'GET',
       url: '/api/test',
-      headers: { origin: ALLOWED_ORIGIN },
+      headers: { origin: CORS_ORIGIN },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers['access-control-allow-origin']).toBe(ALLOWED_ORIGIN);
+    expect(response.headers['access-control-allow-origin']).toBe(CORS_ORIGIN);
     expect(response.headers['access-control-allow-credentials']).toBe('true');
   });
 
@@ -49,7 +52,7 @@ describe('CORS Origin Restriction', () => {
     // against its own origin and blocks the response if they don't match.
     const allowOrigin = response.headers['access-control-allow-origin'];
     expect(allowOrigin).not.toBe('https://evil-site.com');
-    expect(allowOrigin).toBe(ALLOWED_ORIGIN);
+    expect(allowOrigin).toBe(CORS_ORIGIN);
   });
 
   it('handles preflight OPTIONS requests correctly for allowed origin', async () => {
@@ -57,13 +60,13 @@ describe('CORS Origin Restriction', () => {
       method: 'OPTIONS',
       url: '/api/test',
       headers: {
-        origin: ALLOWED_ORIGIN,
+        origin: CORS_ORIGIN,
         'access-control-request-method': 'GET',
       },
     });
 
     expect(response.statusCode).toBe(204);
-    expect(response.headers['access-control-allow-origin']).toBe(ALLOWED_ORIGIN);
+    expect(response.headers['access-control-allow-origin']).toBe(CORS_ORIGIN);
   });
 
   it('does not reflect unknown origins in preflight response', async () => {
@@ -78,6 +81,6 @@ describe('CORS Origin Restriction', () => {
 
     const allowOrigin = response.headers['access-control-allow-origin'];
     expect(allowOrigin).not.toBe('https://malicious.com');
-    expect(allowOrigin).toBe(ALLOWED_ORIGIN);
+    expect(allowOrigin).toBe(CORS_ORIGIN);
   });
 });

@@ -13,6 +13,7 @@ import wsServer from './ws/wsServer.js';
 import { initMediasoup, setLogger, closeMediasoup } from './plugins/voice/mediasoupManager.js';
 import { registerVoiceHandlers } from './plugins/voice/voiceWsHandler.js';
 import { LOG_REDACT_CONFIG } from './config/logRedaction.js';
+import { CORS_ORIGIN } from './config/corsConfig.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -28,7 +29,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // --- Infrastructure Plugins (register BEFORE domain plugins) ---
   await app.register(cors, {
-    origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+    origin: CORS_ORIGIN,
     credentials: true,
   });
   await app.register(dbPlugin);

@@ -13,14 +13,15 @@ import { join, extname } from 'path';
  */
 
 const OUTBOUND_PATTERNS = [
-  /\bfetch\s*\(/,
-  /\bhttp\.request\s*\(/,
-  /\bhttps\.request\s*\(/,
+  /\bfetch\s*\(/s,
+  /\bhttp\.request\s*\(/s,
+  /\bhttps\.request\s*\(/s,
   /\baxios\b/,
-  /\bgot\s*\(/,
+  /\bgot\s*\(/s,
   /\bnode-fetch\b/,
   /\bundici\b/,
-  /new\s+XMLHttpRequest/,
+  /new\s+XMLHttpRequest/s,
+  /import\s*\(\s*['"](?:node-fetch|got|axios|undici|superagent|request)['"]/s,
 ];
 
 function collectTsFiles(dir: string, files: string[] = []): string[] {
@@ -41,29 +42,28 @@ describe('No Outbound HTTP Requests in Server Source', () => {
 
   it('server source files contain no outbound HTTP request patterns', () => {
     const sourceFiles = collectTsFiles(serverSrcDir);
-    const violations: { file: string; line: number; content: string }[] = [];
+    const violations: { file: string; line: number; match: string }[] = [];
 
     for (const filePath of sourceFiles) {
       const content = readFileSync(filePath, 'utf-8');
-      const lines = content.split('\n');
 
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        for (const pattern of OUTBOUND_PATTERNS) {
-          if (pattern.test(line)) {
-            violations.push({
-              file: filePath.replace(serverSrcDir, 'src'),
-              line: i + 1,
-              content: line.trim(),
-            });
-          }
+      for (const pattern of OUTBOUND_PATTERNS) {
+        const match = pattern.exec(content);
+        if (match) {
+          // Calculate line number from match index
+          const line = content.substring(0, match.index).split('\n').length;
+          violations.push({
+            file: filePath.replace(serverSrcDir, 'src'),
+            line,
+            match: match[0].trim(),
+          });
         }
       }
     }
 
     expect(
       violations,
-      `Found outbound HTTP patterns:\n${violations.map((v) => `  ${v.file}:${v.line} → ${v.content}`).join('\n')}`,
+      `Found outbound HTTP patterns:\n${violations.map((v) => `  ${v.file}:${v.line} → ${v.match}`).join('\n')}`,
     ).toEqual([]);
   });
 

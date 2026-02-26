@@ -14,6 +14,19 @@ const channelResponseSchema = {
   },
 } as const;
 
+const errorResponseSchema = {
+  type: 'object',
+  properties: {
+    error: {
+      type: 'object',
+      properties: {
+        code: { type: 'string' },
+        message: { type: 'string' },
+      },
+    },
+  },
+} as const;
+
 export default async function channelRoutes(fastify: FastifyInstance) {
   fastify.get('/', {
     schema: {
@@ -54,6 +67,8 @@ export default async function channelRoutes(fastify: FastifyInstance) {
             data: channelResponseSchema,
           },
         },
+        400: errorResponseSchema,
+        403: errorResponseSchema,
       },
     },
   }, async (request, reply) => {
@@ -92,6 +107,8 @@ export default async function channelRoutes(fastify: FastifyInstance) {
       },
       response: {
         204: { type: 'null', description: 'Channel deleted' },
+        403: errorResponseSchema,
+        404: errorResponseSchema,
       },
     },
   }, async (request, reply) => {

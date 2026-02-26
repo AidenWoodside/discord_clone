@@ -105,7 +105,7 @@ describe('wsRouter', () => {
       respond(ws, 'req-1', { data: 'test' });
 
       expect(ws.send).toHaveBeenCalledTimes(1);
-      const sent = JSON.parse(ws.send.mock.calls[0][0] as string);
+      const sent = JSON.parse(vi.mocked(ws.send).mock.calls[0][0] as string);
       expect(sent.type).toBe('response');
       expect(sent.id).toBe('req-1');
       expect(sent.payload).toEqual({ data: 'test' });
@@ -123,7 +123,7 @@ describe('wsRouter', () => {
     it('sends a response with empty payload', () => {
       respond(ws, 'req-2', {});
 
-      const sent = JSON.parse(ws.send.mock.calls[0][0] as string);
+      const sent = JSON.parse(vi.mocked(ws.send).mock.calls[0][0] as string);
       expect(sent.type).toBe('response');
       expect(sent.payload).toEqual({});
     });
@@ -134,7 +134,7 @@ describe('wsRouter', () => {
       respondError(ws, 'req-3', 'Something went wrong');
 
       expect(ws.send).toHaveBeenCalledTimes(1);
-      const sent = JSON.parse(ws.send.mock.calls[0][0] as string);
+      const sent = JSON.parse(vi.mocked(ws.send).mock.calls[0][0] as string);
       expect(sent.type).toBe('error');
       expect(sent.id).toBe('req-3');
       expect(sent.payload.error).toBe('Something went wrong');

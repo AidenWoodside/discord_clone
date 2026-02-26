@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import type { WebSocket } from 'ws';
 
 vi.hoisted(() => {
   process.env.JWT_ACCESS_SECRET = 'test-secret-key-for-testing';

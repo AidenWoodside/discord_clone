@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws';
-import type { BaseLogger } from 'pino';
+import type { FastifyBaseLogger } from 'fastify';
 import websocket from '@fastify/websocket';
 import fp from 'fastify-plugin';
 import type { WsMessage } from 'discord-clone-shared';
@@ -21,7 +21,7 @@ export function getClients(): Map<string, WebSocket> {
   return clients;
 }
 
-export function broadcastToAll(message: WsMessage, log?: BaseLogger): void {
+export function broadcastToAll(message: WsMessage, log?: FastifyBaseLogger): void {
   const data = JSON.stringify(message);
   for (const ws of clients.values()) {
     if (ws.readyState === ws.OPEN) {

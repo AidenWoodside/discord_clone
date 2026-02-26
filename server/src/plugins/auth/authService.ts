@@ -4,15 +4,15 @@ import jwt from 'jsonwebtoken';
 
 const BCRYPT_COST_FACTOR = 12;
 
-const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
-if (!JWT_ACCESS_SECRET) {
+if (!process.env.JWT_ACCESS_SECRET) {
   throw new Error('JWT_ACCESS_SECRET environment variable is required');
 }
+const JWT_ACCESS_SECRET: string = process.env.JWT_ACCESS_SECRET;
 
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
-if (!JWT_REFRESH_SECRET) {
+if (!process.env.JWT_REFRESH_SECRET) {
   throw new Error('JWT_REFRESH_SECRET environment variable is required');
 }
+const JWT_REFRESH_SECRET: string = process.env.JWT_REFRESH_SECRET;
 
 export interface JwtPayload {
   userId: string;
@@ -39,7 +39,7 @@ export function verifyAccessToken(token: string): JwtPayload {
   if (typeof decoded === 'string' || !decoded.userId || !decoded.role || !decoded.username) {
     throw new Error('Invalid token payload structure');
   }
-  return decoded as JwtPayload;
+  return decoded as unknown as JwtPayload;
 }
 
 export function generateRefreshToken(payload: { userId: string; role: string; username: string }): string {
@@ -51,7 +51,7 @@ export function verifyRefreshToken(token: string): JwtPayload {
   if (typeof decoded === 'string' || !decoded.userId || !decoded.role || !decoded.username) {
     throw new Error('Invalid token payload structure');
   }
-  return decoded as JwtPayload;
+  return decoded as unknown as JwtPayload;
 }
 
 export function hashToken(token: string): string {

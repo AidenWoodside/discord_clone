@@ -2,7 +2,7 @@
 title: 'Automated EC2 Deployment via GitHub Actions'
 slug: 'automated-ec2-deployment'
 created: '2026-02-25'
-status: 'implementation-complete'
+status: 'implementation-ready'
 stepsCompleted: [1, 2, 3, 4]
 tech_stack: ['GitHub Actions', 'appleboy/ssh-action@v1', 'Docker Compose']
 files_to_modify: ['.github/workflows/release.yml']
@@ -94,9 +94,9 @@ Add a `deploy-server` job to the existing `release.yml` workflow that SSHs into 
   - File: `.github/workflows/release.yml` (inside `deploy-server` job's SSH script)
   - Action: Pull latest code, rebuild, and restart:
     ```bash
-    git pull origin main
-    docker compose build
-    docker compose up -d
+    git pull origin main || { echo "DEPLOY FAILED — git pull failed"; exit 1; }
+    docker compose build app || { echo "DEPLOY FAILED — docker build failed"; exit 1; }
+    docker compose up -d app
     ```
 
 - [x] Task 4: Implement health check loop with auto-rollback (within SSH script)

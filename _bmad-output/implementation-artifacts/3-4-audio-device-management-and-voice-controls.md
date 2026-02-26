@@ -1,6 +1,6 @@
 # Story 3.4: Audio Device Management & Voice Controls
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -38,105 +38,105 @@ So that I can use the right hardware and manage my audio without leaving the cal
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Add `useMediaDevices` hook for device enumeration (AC: 1)
-  - [ ] 1.1 Create `client/src/renderer/src/hooks/useMediaDevices.ts`
-  - [ ] 1.2 Call `navigator.mediaDevices.enumerateDevices()` to list `audioinput` and `audiooutput` devices
-  - [ ] 1.3 Listen for `devicechange` event to auto-update device list when devices are plugged/unplugged
-  - [ ] 1.4 Return `{ audioInputs: MediaDeviceInfo[], audioOutputs: MediaDeviceInfo[], isLoading: boolean }`
-  - [ ] 1.5 Handle permission: if `enumerateDevices()` returns empty labels, the user hasn't granted mic permission yet — return devices with fallback labels ("Microphone 1", "Speaker 1")
-  - [ ] 1.6 Cleanup: remove `devicechange` event listener on unmount
+- [x] Task 1: Add `useMediaDevices` hook for device enumeration (AC: 1)
+  - [x] 1.1 Create `client/src/renderer/src/hooks/useMediaDevices.ts`
+  - [x] 1.2 Call `navigator.mediaDevices.enumerateDevices()` to list `audioinput` and `audiooutput` devices
+  - [x] 1.3 Listen for `devicechange` event to auto-update device list when devices are plugged/unplugged
+  - [x] 1.4 Return `{ audioInputs: MediaDeviceInfo[], audioOutputs: MediaDeviceInfo[], isLoading: boolean }`
+  - [x] 1.5 Handle permission: if `enumerateDevices()` returns empty labels, the user hasn't granted mic permission yet — return devices with fallback labels ("Microphone 1", "Speaker 1")
+  - [x] 1.6 Cleanup: remove `devicechange` event listener on unmount
 
-- [ ] Task 2: Add device selection state to `useVoiceStore` (AC: 1, 2, 3)
-  - [ ] 2.1 Add `selectedAudioInputId: string | null` to VoiceState (null = system default)
-  - [ ] 2.2 Add `selectedAudioOutputId: string | null` to VoiceState (null = system default)
-  - [ ] 2.3 Add `setAudioInputDevice(deviceId: string | null): void` action
-  - [ ] 2.4 Add `setAudioOutputDevice(deviceId: string | null): void` action
-  - [ ] 2.5 `setAudioInputDevice`: calls `mediaService.switchAudioInput(deviceId)` if currently in voice channel
-  - [ ] 2.6 `setAudioOutputDevice`: calls `mediaService.switchAudioOutput(deviceId)` if currently in voice channel
-  - [ ] 2.7 Persist selections to `localStorage` under keys `voiceInputDeviceId` and `voiceOutputDeviceId`
-  - [ ] 2.8 Load persisted selections on store initialization
+- [x] Task 2: Add device selection state to `useVoiceStore` (AC: 1, 2, 3)
+  - [x] 2.1 Add `selectedAudioInputId: string | null` to VoiceState (null = system default)
+  - [x] 2.2 Add `selectedAudioOutputId: string | null` to VoiceState (null = system default)
+  - [x] 2.3 Add `setAudioInputDevice(deviceId: string | null): void` action
+  - [x] 2.4 Add `setAudioOutputDevice(deviceId: string | null): void` action
+  - [x] 2.5 `setAudioInputDevice`: calls `mediaService.switchAudioInput(deviceId)` if currently in voice channel
+  - [x] 2.6 `setAudioOutputDevice`: calls `mediaService.switchAudioOutput(deviceId)` if currently in voice channel
+  - [x] 2.7 Persist selections to `localStorage` under keys `voiceInputDeviceId` and `voiceOutputDeviceId`
+  - [x] 2.8 Load persisted selections on store initialization
 
-- [ ] Task 3: Implement hot-swap input device in `mediaService.ts` (AC: 3)
-  - [ ] 3.1 Add `switchAudioInput(deviceId: string | null): Promise<void>` export
-  - [ ] 3.2 Implementation: call `navigator.mediaDevices.getUserMedia({ audio: { deviceId: deviceId ? { exact: deviceId } : undefined } })` to get new stream
-  - [ ] 3.3 Get new audio track from the new stream
-  - [ ] 3.4 Call `producer.replaceTrack({ track: newTrack })` to hot-swap the track on the mediasoup producer (no disconnect, no renegotiation)
-  - [ ] 3.5 Stop the old `localStream` tracks (`oldTrack.stop()`)
-  - [ ] 3.6 Update the module-level `localStream` reference to the new stream
-  - [ ] 3.7 Restart local VAD with the new stream: `vadService.stopLocalVAD()` then `vadService.startLocalVAD(newStream, callback)`
-  - [ ] 3.8 If muted, set `newTrack.enabled = false` immediately after replaceTrack
-  - [ ] 3.9 Handle errors: if `getUserMedia` fails (device unplugged, permission denied), log warning and keep old stream active
-  - [ ] 3.10 Update `produceAudio()` to accept optional `deviceId` parameter and pass it to `getUserMedia` constraints
+- [x] Task 3: Implement hot-swap input device in `mediaService.ts` (AC: 3)
+  - [x] 3.1 Add `switchAudioInput(deviceId: string | null): Promise<void>` export
+  - [x] 3.2 Implementation: call `navigator.mediaDevices.getUserMedia({ audio: { deviceId: deviceId ? { exact: deviceId } : undefined } })` to get new stream
+  - [x] 3.3 Get new audio track from the new stream
+  - [x] 3.4 Call `producer.replaceTrack({ track: newTrack })` to hot-swap the track on the mediasoup producer (no disconnect, no renegotiation)
+  - [x] 3.5 Stop the old `localStream` tracks (`oldTrack.stop()`)
+  - [x] 3.6 Update the module-level `localStream` reference to the new stream
+  - [x] 3.7 Restart local VAD with the new stream: `vadService.stopLocalVAD()` then `vadService.startLocalVAD(newStream, callback)`
+  - [x] 3.8 If muted, set `newTrack.enabled = false` immediately after replaceTrack
+  - [x] 3.9 Handle errors: if `getUserMedia` fails (device unplugged, permission denied), log warning and keep old stream active
+  - [x] 3.10 Update `produceAudio()` to accept optional `deviceId` parameter and pass it to `getUserMedia` constraints
 
-- [ ] Task 4: Implement hot-swap output device in `mediaService.ts` (AC: 2)
-  - [ ] 4.1 Add `switchAudioOutput(deviceId: string | null): Promise<void>` export
-  - [ ] 4.2 Implementation: iterate all consumers in the `consumers` Map, call `audio.setSinkId(deviceId || '')` on each `HTMLAudioElement`
-  - [ ] 4.3 Store `currentOutputDeviceId` at module level so new consumers created after the switch also use the selected output device
-  - [ ] 4.4 Update `consumeAudio()` to call `audio.setSinkId(currentOutputDeviceId)` when creating new consumer audio elements
-  - [ ] 4.5 Handle errors: `setSinkId` may fail if device is unavailable — log warning, don't crash. Some browsers/Electron versions may not support `setSinkId`
-  - [ ] 4.6 Add TypeScript type assertion: `(audio as any).setSinkId(deviceId)` — `setSinkId` is not in the standard HTMLMediaElement type yet
+- [x] Task 4: Implement hot-swap output device in `mediaService.ts` (AC: 2)
+  - [x] 4.1 Add `switchAudioOutput(deviceId: string | null): Promise<void>` export
+  - [x] 4.2 Implementation: iterate all consumers in the `consumers` Map, call `audio.setSinkId(deviceId || '')` on each `HTMLAudioElement`
+  - [x] 4.3 Store `currentOutputDeviceId` at module level so new consumers created after the switch also use the selected output device
+  - [x] 4.4 Update `consumeAudio()` to call `audio.setSinkId(currentOutputDeviceId)` when creating new consumer audio elements
+  - [x] 4.5 Handle errors: `setSinkId` may fail if device is unavailable — log warning, don't crash. Some browsers/Electron versions may not support `setSinkId`
+  - [x] 4.6 Add TypeScript type assertion: `(audio as any).setSinkId(deviceId)` — `setSinkId` is not in the standard HTMLMediaElement type yet
 
-- [ ] Task 5: Add mute sound cue (AC: 4)
-  - [ ] 5.1 Add `playMuteSound(): void` export to `soundPlayer.ts`
-  - [ ] 5.2 Implementation: short single-tone downward blip — `playTone([330], 0.1)` (lower pitch, shorter duration than connect/disconnect)
-  - [ ] 5.3 Add `playUnmuteSound(): void` export — `playTone([440], 0.1)` (slightly higher pitch for unmute)
-  - [ ] 5.4 In `useVoiceStore.toggleMute()`: call `playMuteSound()` when muting, `playUnmuteSound()` when unmuting
-  - [ ] 5.5 Do NOT play mute sound when mute is caused by deafen toggle (deafen already implies mute — double sound is confusing)
+- [x] Task 5: Add mute sound cue (AC: 4)
+  - [x] 5.1 Add `playMuteSound(): void` export to `soundPlayer.ts`
+  - [x] 5.2 Implementation: short single-tone downward blip — `playTone([330], 0.1)` (lower pitch, shorter duration than connect/disconnect)
+  - [x] 5.3 Add `playUnmuteSound(): void` export — `playTone([440], 0.1)` (slightly higher pitch for unmute)
+  - [x] 5.4 In `useVoiceStore.toggleMute()`: call `playMuteSound()` when muting, `playUnmuteSound()` when unmuting
+  - [x] 5.5 Do NOT play mute sound when mute is caused by deafen toggle (deafen already implies mute — double sound is confusing)
 
-- [ ] Task 6: Broadcast mute/deafen state via WebSocket (AC: 10)
-  - [ ] 6.1 In `useVoiceStore.toggleMute()`: after toggling, send `voice:state` WS message with `{ userId, channelId, muted, deafened, speaking: false }`
-  - [ ] 6.2 In `useVoiceStore.toggleDeafen()`: after toggling, send `voice:state` WS message with current state
-  - [ ] 6.3 Use existing `WS_TYPES.VOICE_STATE` constant and `VoiceStatePayload` interface (both already defined in `shared/src/ws-messages.ts`)
-  - [ ] 6.4 In `wsClient.ts`: send voice:state by calling `sendMessage(WS_TYPES.VOICE_STATE, payload)` — NO need for request/response, this is fire-and-forget broadcast
+- [x] Task 6: Broadcast mute/deafen state via WebSocket (AC: 10)
+  - [x] 6.1 In `useVoiceStore.toggleMute()`: after toggling, send `voice:state` WS message with `{ userId, channelId, muted, deafened, speaking: false }`
+  - [x] 6.2 In `useVoiceStore.toggleDeafen()`: after toggling, send `voice:state` WS message with current state
+  - [x] 6.3 Use existing `WS_TYPES.VOICE_STATE` constant and `VoiceStatePayload` interface (both already defined in `shared/src/ws-messages.ts`)
+  - [x] 6.4 In `wsClient.ts`: send voice:state by calling `sendMessage(WS_TYPES.VOICE_STATE, payload)` — NO need for request/response, this is fire-and-forget broadcast
 
-- [ ] Task 7: Server relay for voice:state messages (AC: 10)
-  - [ ] 7.1 In `server/src/plugins/voice/voiceWsHandler.ts`: add handler for `WS_TYPES.VOICE_STATE`
-  - [ ] 7.2 Handler: receive `VoiceStatePayload`, validate userId matches authenticated user
-  - [ ] 7.3 Broadcast `voice:state` to all other peers in the same channel using existing `broadcastToChannel()` helper
-  - [ ] 7.4 Do NOT store mute/deafen state on the server — this is a transient relay only (privacy-first: server doesn't track user state)
+- [x] Task 7: Server relay for voice:state messages (AC: 10)
+  - [x] 7.1 In `server/src/plugins/voice/voiceWsHandler.ts`: add handler for `WS_TYPES.VOICE_STATE`
+  - [x] 7.2 Handler: receive `VoiceStatePayload`, validate userId matches authenticated user
+  - [x] 7.3 Broadcast `voice:state` to all other peers in the same channel using existing `broadcastToChannel()` helper
+  - [x] 7.4 Do NOT store mute/deafen state on the server — this is a transient relay only (privacy-first: server doesn't track user state)
 
-- [ ] Task 8: Handle incoming voice:state on client (AC: 10)
-  - [ ] 8.1 Add `remoteMuteState: Map<string, { muted: boolean, deafened: boolean }>` to useVoiceStore
-  - [ ] 8.2 Add `setRemoteMuteState(userId: string, muted: boolean, deafened: boolean): void` action
-  - [ ] 8.3 Clear `remoteMuteState` in `leaveChannel()` and `localCleanup()`
-  - [ ] 8.4 Clear individual user from `remoteMuteState` in `removePeer()`
-  - [ ] 8.5 In `wsClient.ts`: register handler for `WS_TYPES.VOICE_STATE` — call `useVoiceStore.getState().setRemoteMuteState(payload.userId, payload.muted, payload.deafened)`
+- [x] Task 8: Handle incoming voice:state on client (AC: 10)
+  - [x] 8.1 Add `remoteMuteState: Map<string, { muted: boolean, deafened: boolean }>` to useVoiceStore
+  - [x] 8.2 Add `setRemoteMuteState(userId: string, muted: boolean, deafened: boolean): void` action
+  - [x] 8.3 Clear `remoteMuteState` in `leaveChannel()` and `localCleanup()`
+  - [x] 8.4 Clear individual user from `remoteMuteState` in `removePeer()`
+  - [x] 8.5 In `wsClient.ts`: register handler for `WS_TYPES.VOICE_STATE` — call `useVoiceStore.getState().setRemoteMuteState(payload.userId, payload.muted, payload.deafened)`
 
-- [ ] Task 9: Display remote mute/deafen icons in VoiceParticipant (AC: 10)
-  - [ ] 9.1 In `VoiceParticipant.tsx`: read `remoteMuteState` from `useVoiceStore`
-  - [ ] 9.2 For non-local users: check `remoteMuteState.get(userId)` for muted/deafened state
-  - [ ] 9.3 If remote user is muted: show `MicOff` icon overlay on avatar (same style as local user mute icon — `absolute -bottom-0.5 -right-0.5 bg-bg-primary rounded-full p-0.5`)
-  - [ ] 9.4 If remote user is deafened: show `HeadphoneOff` icon overlay instead (deafen implies mute, so show deafen icon, not both)
-  - [ ] 9.5 Update ARIA label: include "(muted)" or "(deafened)" for remote users when applicable
+- [x] Task 9: Display remote mute/deafen icons in VoiceParticipant (AC: 10)
+  - [x] 9.1 In `VoiceParticipant.tsx`: read `remoteMuteState` from `useVoiceStore`
+  - [x] 9.2 For non-local users: check `remoteMuteState.get(userId)` for muted/deafened state
+  - [x] 9.3 If remote user is muted: show `MicOff` icon overlay on avatar (same style as local user mute icon — `absolute -bottom-0.5 -right-0.5 bg-bg-primary rounded-full p-0.5`)
+  - [x] 9.4 If remote user is deafened: show `HeadphoneOff` icon overlay instead (deafen implies mute, so show deafen icon, not both)
+  - [x] 9.5 Update ARIA label: include "(muted)" or "(deafened)" for remote users when applicable
 
-- [ ] Task 10: Create AudioSettings UI component (AC: 1)
-  - [ ] 10.1 Create `client/src/renderer/src/features/settings/AudioSettings.tsx`
-  - [ ] 10.2 Use `useMediaDevices` hook to get device lists
-  - [ ] 10.3 Render two `<select>` dropdowns: "Input Device" (microphones) and "Output Device" (speakers/headphones)
-  - [ ] 10.4 Include "System Default" as the first option in each dropdown (value = `""`)
-  - [ ] 10.5 Selected values come from `useVoiceStore.selectedAudioInputId` / `selectedAudioOutputId`
-  - [ ] 10.6 On change: call `useVoiceStore.getState().setAudioInputDevice(deviceId)` / `setAudioOutputDevice(deviceId)`
-  - [ ] 10.7 Style with Tailwind: match the dark theme, use `bg-bg-secondary`, `text-text-primary`, `border-border-primary` tokens
-  - [ ] 10.8 Show section heading "Voice & Audio" with device dropdowns
-  - [ ] 10.9 No additional settings needed for MVP (no volume sliders, no noise suppression toggle, no VAD sensitivity)
+- [x] Task 10: Create AudioSettings UI component (AC: 1)
+  - [x] 10.1 Create `client/src/renderer/src/features/settings/AudioSettings.tsx`
+  - [x] 10.2 Use `useMediaDevices` hook to get device lists
+  - [x] 10.3 Render two `<select>` dropdowns: "Input Device" (microphones) and "Output Device" (speakers/headphones)
+  - [x] 10.4 Include "System Default" as the first option in each dropdown (value = `""`)
+  - [x] 10.5 Selected values come from `useVoiceStore.selectedAudioInputId` / `selectedAudioOutputId`
+  - [x] 10.6 On change: call `useVoiceStore.getState().setAudioInputDevice(deviceId)` / `setAudioOutputDevice(deviceId)`
+  - [x] 10.7 Style with Tailwind: match the dark theme, use `bg-bg-secondary`, `text-text-primary`, `border-border-primary` tokens
+  - [x] 10.8 Show section heading "Voice & Audio" with device dropdowns
+  - [x] 10.9 No additional settings needed for MVP (no volume sliders, no noise suppression toggle, no VAD sensitivity)
 
-- [ ] Task 11: Wire AudioSettings into Settings page routing (AC: 1)
-  - [ ] 11.1 Create `client/src/renderer/src/features/settings/SettingsPage.tsx` — a settings view that replaces the content area (center column)
-  - [ ] 11.2 Per UX spec: settings views replace the content area, sidebar remains visible
-  - [ ] 11.3 Add settings route or state toggle: clicking the Settings gear icon in `UserPanel.tsx` → shows `SettingsPage` in the content area
-  - [ ] 11.4 Settings page includes: "Voice & Audio" section with `AudioSettings` component, and a "Close" / back button (or Escape key) to return to channel view
-  - [ ] 11.5 Add `isSettingsOpen: boolean` and `setSettingsOpen(open: boolean)` to a UI state mechanism (can be in a local component state in AppLayout, or a simple `useSettingsStore` — prefer simplest approach)
-  - [ ] 11.6 Wire UserPanel settings button `onClick` to open settings
-  - [ ] 11.7 Ensure voice connection persists when settings are open (voice is a layer, not a destination)
+- [x] Task 11: Wire AudioSettings into Settings page routing (AC: 1)
+  - [x] 11.1 Create `client/src/renderer/src/features/settings/SettingsPage.tsx` — a settings view that replaces the content area (center column)
+  - [x] 11.2 Per UX spec: settings views replace the content area, sidebar remains visible
+  - [x] 11.3 Add settings route or state toggle: clicking the Settings gear icon in `UserPanel.tsx` → shows `SettingsPage` in the content area
+  - [x] 11.4 Settings page includes: "Voice & Audio" section with `AudioSettings` component, and a "Close" / back button (or Escape key) to return to channel view
+  - [x] 11.5 Add `isSettingsOpen: boolean` and `setSettingsOpen(open: boolean)` to a UI state mechanism (can be in a local component state in AppLayout, or a simple `useSettingsStore` — prefer simplest approach)
+  - [x] 11.6 Wire UserPanel settings button `onClick` to open settings
+  - [x] 11.7 Ensure voice connection persists when settings are open (voice is a layer, not a destination)
 
-- [ ] Task 12: Write tests (AC: 1-10)
-  - [ ] 12.1 Create `client/src/renderer/src/hooks/useMediaDevices.test.ts`:
+- [x] Task 12: Write tests (AC: 1-10)
+  - [x] 12.1 Create `client/src/renderer/src/hooks/useMediaDevices.test.ts`:
     - Test returns audio input and output device lists
     - Test updates device list on `devicechange` event
     - Test handles empty labels gracefully
     - Test cleanup removes event listener
     - Mock `navigator.mediaDevices.enumerateDevices`
-  - [ ] 12.2 Update `client/src/renderer/src/stores/useVoiceStore.test.ts`:
+  - [x] 12.2 Update `client/src/renderer/src/stores/useVoiceStore.test.ts`:
     - Test `setAudioInputDevice()` calls `mediaService.switchAudioInput()` when in voice
     - Test `setAudioOutputDevice()` calls `mediaService.switchAudioOutput()` when in voice
     - Test `setAudioInputDevice()` does NOT call mediaService when not in voice
@@ -149,7 +149,7 @@ So that I can use the right hardware and manage my audio without leaving the cal
     - Test `toggleDeafen()` sends voice:state WS message
     - Test `toggleMute()` plays mute/unmute sound
     - Test deafen does NOT play mute sound separately
-  - [ ] 12.3 Update `client/src/renderer/src/services/mediaService.test.ts`:
+  - [x] 12.3 Update `client/src/renderer/src/services/mediaService.test.ts`:
     - Test `switchAudioInput()` calls getUserMedia with deviceId constraint
     - Test `switchAudioInput()` calls producer.replaceTrack
     - Test `switchAudioInput()` stops old tracks
@@ -159,28 +159,28 @@ So that I can use the right hardware and manage my audio without leaving the cal
     - Test `switchAudioOutput()` calls setSinkId on all consumer audio elements
     - Test `switchAudioOutput()` stores deviceId for new consumers
     - Test `consumeAudio()` uses stored output device
-  - [ ] 12.4 Create `client/src/renderer/src/features/settings/AudioSettings.test.tsx`:
+  - [x] 12.4 Create `client/src/renderer/src/features/settings/AudioSettings.test.tsx`:
     - Test renders input and output device dropdowns
     - Test shows "System Default" option
     - Test selecting input device calls setAudioInputDevice
     - Test selecting output device calls setAudioOutputDevice
     - Test shows current selected devices
-  - [ ] 12.5 Update `client/src/renderer/src/features/voice/VoiceParticipant.test.tsx`:
+  - [x] 12.5 Update `client/src/renderer/src/features/voice/VoiceParticipant.test.tsx`:
     - Test shows mute icon for remote muted user
     - Test shows deafen icon for remote deafened user
     - Test deafen icon takes priority over mute icon
     - Test ARIA label includes "(muted)" for remote muted users
     - Test ARIA label includes "(deafened)" for remote deafened users
-  - [ ] 12.6 Create `server/src/plugins/voice/voiceWsHandler.test.ts` (or update existing):
+  - [x] 12.6 Create `server/src/plugins/voice/voiceWsHandler.test.ts` (or update existing):
     - Test VOICE_STATE handler broadcasts to channel peers
     - Test VOICE_STATE handler validates userId
     - Test VOICE_STATE handler excludes sender from broadcast
 
-- [ ] Task 13: Final verification (AC: 1-10)
-  - [ ] 13.1 Run `npm test -w client` — all new + existing tests pass
-  - [ ] 13.2 Run `npm test -w server` — all server tests pass
-  - [ ] 13.3 Run `npm run lint` — no lint errors
-  - [ ] 13.4 Run `npm run build -w client` — builds successfully
+- [x] Task 13: Final verification (AC: 1-10)
+  - [x] 13.1 Run `npm test -w client` — all new + existing tests pass (406 tests, 39 files)
+  - [x] 13.2 Run `npm test -w server` — all server tests pass (293 tests, 23 files)
+  - [x] 13.3 Run `npm run lint` — no lint errors
+  - [x] 13.4 Run `npm run build -w client` — builds successfully
   - [ ] 13.5 Manual test: open settings → see audio device dropdowns
   - [ ] 13.6 Manual test: select different microphone → audio switches without disconnecting
   - [ ] 13.7 Manual test: select different speaker → audio plays from new device without disconnecting
@@ -478,10 +478,54 @@ server/src/plugins/voice/
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.6
 
 ### Debug Log References
 
+None — clean implementation with no blocking issues.
+
 ### Completion Notes List
 
+- Task 1: Created `useMediaDevices` hook with `enumerateDevices()`, `devicechange` listener, fallback labels for empty device labels, and cleanup on unmount.
+- Task 2: Added `selectedAudioInputId`, `selectedAudioOutputId`, `remoteMuteState` to `useVoiceStore`. Added `setAudioInputDevice`, `setAudioOutputDevice`, `setRemoteMuteState` actions. Device selections persist to `localStorage` and load on init.
+- Task 3: Added `switchAudioInput()` to `mediaService.ts` using `producer.replaceTrack()` for zero-disconnect hot-swap. Preserves muted state, restarts VAD, stops old tracks, handles errors gracefully. Updated `produceAudio()` to accept optional `deviceId`.
+- Task 4: Added `switchAudioOutput()` to `mediaService.ts` using `setSinkId()` on all consumer audio elements. Stored `currentOutputDeviceId` at module level for new consumers. Updated `consumeAudio()` to apply `setSinkId` on creation.
+- Task 5: Added `playMuteSound()` (330Hz, 0.1s) and `playUnmuteSound()` (440Hz, 0.1s) to `soundPlayer.ts`. Wired into `toggleMute()` only — deafen does NOT play mute sound.
+- Task 6: `toggleMute()` and `toggleDeafen()` now send `voice:state` via `wsClient.send()` as fire-and-forget broadcast after state change.
+- Task 7: Added `handleVoiceState` handler in `voiceWsHandler.ts` — validates `userId` matches authenticated user, broadcasts to channel peers via `broadcastToChannel()`. No server-side state storage (privacy-first).
+- Task 8: Added `VOICE_STATE` handler in `wsClient.ts` that calls `setRemoteMuteState()`. `remoteMuteState` cleared on `leaveChannel()`, `localCleanup()`, and per-user in `removePeer()`.
+- Task 9: Updated `VoiceParticipant.tsx` to show `MicOff` for remote muted users and `HeadphoneOff` for remote deafened users. Deafen icon takes priority. ARIA labels include "(muted)" or "(deafened)".
+- Task 10: Created `AudioSettings.tsx` with Input/Output device `<select>` dropdowns, "System Default" option, Tailwind dark theme styling.
+- Task 11: Created `SettingsPage.tsx` with close button + Escape key. Added `isSettingsOpen`/`setSettingsOpen` to `useUIStore`. Wired settings gear in `UserPanel.tsx`. Settings replace content area; sidebar + voice persist.
+- Task 12: 37+ new tests across 6 test files covering all new functionality.
+- Task 13: 406 client tests pass, 293 server tests pass, lint clean, build succeeds.
+
+### Change Log
+
+- 2026-02-25: Implemented story 3-4 — audio device management, mute sound cues, voice state broadcasting, remote mute/deafen icons, settings page with audio device selection.
+
 ### File List
+
+**New files:**
+- `client/src/renderer/src/hooks/useMediaDevices.ts`
+- `client/src/renderer/src/hooks/useMediaDevices.test.ts`
+- `client/src/renderer/src/features/settings/AudioSettings.tsx`
+- `client/src/renderer/src/features/settings/AudioSettings.test.tsx`
+- `client/src/renderer/src/features/settings/SettingsPage.tsx`
+
+**Modified files:**
+- `client/src/renderer/src/services/mediaService.ts` — added `switchAudioInput`, `switchAudioOutput`, `currentOutputDeviceId`, updated `produceAudio`/`consumeAudio`
+- `client/src/renderer/src/services/mediaService.test.ts` — added tests for switchAudioInput, switchAudioOutput
+- `client/src/renderer/src/stores/useVoiceStore.ts` — added device selection state, remoteMuteState, voice:state sending, mute sounds
+- `client/src/renderer/src/stores/useVoiceStore.test.ts` — added tests for new state/actions
+- `client/src/renderer/src/stores/useUIStore.ts` — added `isSettingsOpen`/`setSettingsOpen`
+- `client/src/renderer/src/features/voice/VoiceParticipant.tsx` — added remote mute/deafen icon display
+- `client/src/renderer/src/features/voice/VoiceParticipant.test.tsx` — added tests for remote mute/deafen icons
+- `client/src/renderer/src/features/layout/UserPanel.tsx` — wired settings gear onClick
+- `client/src/renderer/src/features/layout/AppLayout.tsx` — added settings page toggle
+- `client/src/renderer/src/utils/soundPlayer.ts` — added playMuteSound, playUnmuteSound
+- `client/src/renderer/src/services/wsClient.ts` — added VOICE_STATE handler
+- `server/src/plugins/voice/voiceWsHandler.ts` — added voice:state relay handler
+- `server/src/plugins/voice/voiceWsHandler.test.ts` — added VOICE_STATE handler tests
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` — updated story status
+- `_bmad-output/implementation-artifacts/3-4-audio-device-management-and-voice-controls.md` — updated tasks, status, dev record

@@ -52,6 +52,7 @@ export function registerVoiceHandlers(appDb: AppDatabase, logger: FastifyBaseLog
   registerHandler(WS_TYPES.VOICE_PRODUCE, handleProduce);
   registerHandler(WS_TYPES.VOICE_CONSUME, handleConsume);
   registerHandler(WS_TYPES.VOICE_CONSUMER_RESUME, handleConsumerResume);
+  registerHandler(WS_TYPES.VOICE_STATE, handleVoiceState);
 }
 
 function handleVoiceJoin(ws: WebSocket, message: WsMessage, userId: string): void {
@@ -336,6 +337,23 @@ function handleConsumerResume(ws: WebSocket, message: WsMessage, userId: string)
       log.error({ userId, consumerId, err: err.message }, 'Failed to resume consumer');
       if (requestId) respondError(ws, requestId, 'Failed to resume consumer');
     });
+}
+
+function handleVoiceState(_ws: WebSocket, message: WsMessage, userId: string): void {
+  const payload = message.payload as { userId: string; channelId: string; muted: boolean; deafened: boolean; speaking: boolean };
+
+  // Validate userId matches authenticated user
+  if (payload.userId !== userId) {
+    return;
+  }
+
+  const peer = getPeer(userId);
+  if (!peer) {
+    return;
+  }
+
+  // Broadcast to all other peers in the same channel — fire-and-forget, no storage
+  broadcastToChannel(peer.channelId, userId, WS_TYPES.VOICE_STATE, payload);
 }
 
 export function handleVoiceDisconnect(userId: string): void {

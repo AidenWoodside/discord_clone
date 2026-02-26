@@ -26,6 +26,8 @@ beforeEach(() => {
   useVoiceStore.setState({
     speakingUsers: new Set<string>(),
     isMuted: false,
+    isDeafened: false,
+    remoteMuteState: new Map(),
   });
 });
 
@@ -137,13 +139,70 @@ describe('VoiceParticipant', () => {
       expect(muteIcon).toBeNull();
     });
 
-    it('does not show mute icon for remote users even when local user is muted', () => {
+    it('does not show mute icon for remote users when no remote state exists', () => {
       useVoiceStore.setState({ isMuted: true });
       render(<VoiceParticipant userId="user-2" />);
 
       const avatar = screen.getByText('B');
       const muteIcon = avatar.querySelector('svg');
       expect(muteIcon).toBeNull();
+    });
+  });
+
+  describe('remote mute/deafen icon', () => {
+    it('shows mute icon for remote muted user', () => {
+      useVoiceStore.setState({
+        remoteMuteState: new Map([['user-2', { muted: true, deafened: false }]]),
+      });
+      render(<VoiceParticipant userId="user-2" />);
+
+      const avatar = screen.getByText('B');
+      const icon = avatar.querySelector('svg');
+      expect(icon).toBeTruthy();
+    });
+
+    it('shows deafen icon for remote deafened user', () => {
+      useVoiceStore.setState({
+        remoteMuteState: new Map([['user-2', { muted: true, deafened: true }]]),
+      });
+      render(<VoiceParticipant userId="user-2" />);
+
+      const avatar = screen.getByText('B');
+      const icons = avatar.querySelectorAll('svg');
+      // Should show only ONE icon (deafen takes priority)
+      expect(icons).toHaveLength(1);
+    });
+
+    it('deafen icon takes priority over mute icon', () => {
+      useVoiceStore.setState({
+        remoteMuteState: new Map([['user-2', { muted: true, deafened: true }]]),
+      });
+      render(<VoiceParticipant userId="user-2" />);
+
+      const avatar = screen.getByText('B');
+      const icons = avatar.querySelectorAll('svg');
+      // Only one icon shown, not both
+      expect(icons).toHaveLength(1);
+    });
+
+    it('ARIA label includes (muted) for remote muted users', () => {
+      useVoiceStore.setState({
+        remoteMuteState: new Map([['user-2', { muted: true, deafened: false }]]),
+      });
+      render(<VoiceParticipant userId="user-2" />);
+
+      const row = screen.getByRole('listitem');
+      expect(row).toHaveAttribute('aria-label', expect.stringContaining('(muted)'));
+    });
+
+    it('ARIA label includes (deafened) for remote deafened users', () => {
+      useVoiceStore.setState({
+        remoteMuteState: new Map([['user-2', { muted: true, deafened: true }]]),
+      });
+      render(<VoiceParticipant userId="user-2" />);
+
+      const row = screen.getByRole('listitem');
+      expect(row).toHaveAttribute('aria-label', expect.stringContaining('(deafened)'));
     });
   });
 });

@@ -13,6 +13,7 @@ import type {
   VoiceProducerClosedPayload,
   VoiceConsumeResponse,
   VoiceChannelPresencePayload,
+  VoiceStatePayload,
 } from 'discord-clone-shared';
 import { WS_TYPES, WS_RECONNECT_DELAY, WS_MAX_RECONNECT_DELAY } from 'discord-clone-shared';
 import { usePresenceStore } from '../stores/usePresenceStore';
@@ -335,6 +336,11 @@ class WsClient {
       const payload = message.payload as VoiceChannelPresencePayload;
       import('../stores/useVoiceStore').then(({ useVoiceStore }) => {
         useVoiceStore.getState().syncParticipants(payload.participants);
+      }).catch(() => {});
+    } else if (message.type === WS_TYPES.VOICE_STATE) {
+      const payload = message.payload as VoiceStatePayload;
+      import('../stores/useVoiceStore').then(({ useVoiceStore }) => {
+        useVoiceStore.getState().setRemoteMuteState(payload.userId, payload.muted, payload.deafened);
       }).catch(() => {});
     }
 

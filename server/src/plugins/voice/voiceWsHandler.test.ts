@@ -119,6 +119,7 @@ describe('voiceWsHandler', () => {
     expect(registeredHandlers.has(WS_TYPES.VOICE_PRODUCE)).toBe(true);
     expect(registeredHandlers.has(WS_TYPES.VOICE_CONSUME)).toBe(true);
     expect(registeredHandlers.has(WS_TYPES.VOICE_CONSUMER_RESUME)).toBe(true);
+    expect(registeredHandlers.has(WS_TYPES.VOICE_STATE)).toBe(true);
   });
 
   describe('voice:join', () => {
@@ -610,6 +611,74 @@ describe('voiceWsHandler', () => {
     it('does nothing for user not in voice', () => {
       // Should not throw
       handleVoiceDisconnect('nonexistent');
+    });
+  });
+
+  describe('voice:state', () => {
+    it('broadcasts to channel peers', () => {
+      joinVoiceChannel('user-1', 'voice-channel-1', null);
+      joinVoiceChannel('user-2', 'voice-channel-1', null);
+
+      const otherWs = createMockWs();
+      mockClients.set('user-2', otherWs);
+
+      const ws = createMockWs();
+      const handler = registeredHandlers.get(WS_TYPES.VOICE_STATE)!;
+      handler(ws, {
+        type: WS_TYPES.VOICE_STATE,
+        payload: { userId: 'user-1', channelId: 'voice-channel-1', muted: true, deafened: false, speaking: false },
+      }, 'user-1');
+
+      expect(otherWs.send).toHaveBeenCalled();
+      const broadcast = JSON.parse(otherWs.send.mock.calls[0][0]);
+      expect(broadcast.type).toBe(WS_TYPES.VOICE_STATE);
+      expect(broadcast.payload.userId).toBe('user-1');
+      expect(broadcast.payload.muted).toBe(true);
+    });
+
+    it('validates userId matches authenticated user', () => {
+      joinVoiceChannel('user-1', 'voice-channel-1', null);
+      joinVoiceChannel('user-2', 'voice-channel-1', null);
+
+      const otherWs = createMockWs();
+      mockClients.set('user-2', otherWs);
+
+      const ws = createMockWs();
+      const handler = registeredHandlers.get(WS_TYPES.VOICE_STATE)!;
+      // user-1 trying to send state as user-2
+      handler(ws, {
+        type: WS_TYPES.VOICE_STATE,
+        payload: { userId: 'user-2', channelId: 'voice-channel-1', muted: true, deafened: false, speaking: false },
+      }, 'user-1');
+
+      // Should NOT broadcast (userId mismatch)
+      expect(otherWs.send).not.toHaveBeenCalled();
+    });
+
+    it('excludes sender from broadcast', () => {
+      joinVoiceChannel('user-1', 'voice-channel-1', null);
+      joinVoiceChannel('user-2', 'voice-channel-1', null);
+
+      const senderWs = createMockWs();
+      const otherWs = createMockWs();
+      mockClients.set('user-1', senderWs);
+      mockClients.set('user-2', otherWs);
+
+      const handler = registeredHandlers.get(WS_TYPES.VOICE_STATE)!;
+      handler(senderWs, {
+        type: WS_TYPES.VOICE_STATE,
+        payload: { userId: 'user-1', channelId: 'voice-channel-1', muted: true, deafened: false, speaking: false },
+      }, 'user-1');
+
+      // Sender should NOT receive their own broadcast
+      // senderWs.send is not called by broadcastToChannel (it excludes userId)
+      expect(otherWs.send).toHaveBeenCalled();
+      // Check senderWs was not called by the broadcast (it may be called by respond, but broadcastToChannel skips it)
+      const senderCalls = senderWs.send.mock.calls.filter((call: unknown[]) => {
+        const parsed = JSON.parse(call[0] as string);
+        return parsed.type === WS_TYPES.VOICE_STATE;
+      });
+      expect(senderCalls).toHaveLength(0);
     });
   });
 });

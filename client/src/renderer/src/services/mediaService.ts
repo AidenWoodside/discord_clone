@@ -1,5 +1,6 @@
 import { Device, types } from 'mediasoup-client';
 import { wsClient } from './wsClient';
+import * as vadService from './vadService';
 import type {
   VoiceConnectTransportPayload,
   VoiceProducePayload,
@@ -13,6 +14,7 @@ let producer: types.Producer | null = null;
 let localStream: MediaStream | null = null;
 let videoProducer: types.Producer | null = null;
 let localVideoStream: MediaStream | null = null;
+let currentOutputDeviceId = '';
 const consumers = new Map<string, { consumer: types.Consumer; audio: HTMLAudioElement }>();
 const videoConsumers = new Map<string, { consumer: types.Consumer; element: HTMLVideoElement }>();
 
@@ -114,8 +116,14 @@ export function createRecvTransport(
   return recvTransport;
 }
 
-export async function produceAudio(transport: types.Transport): Promise<{ producer: types.Producer; stream: MediaStream }> {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+export async function produceAudio(
+  transport: types.Transport,
+  deviceId?: string | null,
+): Promise<{ producer: types.Producer; stream: MediaStream }> {
+  const constraints: MediaStreamConstraints = {
+    audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+  };
+  const stream = await navigator.mediaDevices.getUserMedia(constraints);
   const track = stream.getAudioTracks()[0];
   const newProducer = await transport.produce({ track });
   producer = newProducer;
@@ -136,6 +144,13 @@ export async function consumeAudio(
 
   const audio = new Audio();
   audio.srcObject = new MediaStream([consumer.track]);
+  if (currentOutputDeviceId) {
+    try {
+      await (audio as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId(currentOutputDeviceId);
+    } catch {
+      // setSinkId may not be supported or device unavailable — use default
+    }
+  }
   await audio.play();
 
   consumers.set(consumer.id, { consumer, audio });
@@ -173,6 +188,56 @@ export function undeafenAudio(restoreMuted: boolean): void {
 
 export function getLocalStream(): MediaStream | null {
   return localStream;
+}
+
+export async function switchAudioInput(
+  deviceId: string | null,
+  onVadSpeakingChange?: (speaking: boolean) => void,
+): Promise<void> {
+  if (!producer) return;
+
+  try {
+    const constraints: MediaStreamConstraints = {
+      audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+    };
+    const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+    const newTrack = newStream.getAudioTracks()[0];
+
+    // Preserve muted state
+    if (producer.track) {
+      newTrack.enabled = producer.track.enabled;
+    }
+
+    // Hot-swap the track — no disconnect, no renegotiation
+    await producer.replaceTrack({ track: newTrack });
+
+    // Cleanup old stream
+    if (localStream) {
+      localStream.getTracks().forEach((t) => t.stop());
+    }
+    localStream = newStream;
+
+    // Restart local VAD with new stream
+    vadService.stopLocalVAD();
+    if (newTrack.enabled && onVadSpeakingChange) {
+      vadService.startLocalVAD(newStream, onVadSpeakingChange);
+    }
+  } catch (err) {
+    console.warn('[mediaService] Failed to switch audio input:', err);
+    // Keep old stream active
+  }
+}
+
+export async function switchAudioOutput(deviceId: string | null): Promise<void> {
+  currentOutputDeviceId = deviceId || '';
+
+  for (const [, entry] of consumers) {
+    try {
+      await (entry.audio as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId(currentOutputDeviceId);
+    } catch (err) {
+      console.warn('[mediaService] Failed to set audio output device:', err);
+    }
+  }
 }
 
 export async function produceVideo(transport: types.Transport): Promise<void> {

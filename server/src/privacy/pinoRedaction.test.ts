@@ -1,34 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import Fastify from 'fastify';
 import { Writable } from 'stream';
-
-/**
- * Pino Redaction: Verifies that sensitive fields are redacted in log output.
- * Uses the same redaction config as server/src/app.ts.
- */
-
-const REDACT_CONFIG = {
-  paths: [
-    'req.headers.authorization',
-    'req.body.password',
-    'req.body.encryptedContent',
-    'req.body.encrypted_content',
-    'req.body.nonce',
-    'encrypted_content',
-    'nonce',
-    'password',
-    'passwordHash',
-    'password_hash',
-    'refreshToken',
-    'refresh_token',
-    'accessToken',
-    'access_token',
-    'groupEncryptionKey',
-    'privateKey',
-    'secret',
-  ],
-  censor: '[REDACTED]',
-};
+import { LOG_REDACT_CONFIG } from '../config/logRedaction.js';
 
 function createLogCapture(): { stream: Writable; getOutput: () => string } {
   const chunks: Buffer[] = [];
@@ -50,7 +23,7 @@ describe('Pino Log Redaction', () => {
     const app = Fastify({
       logger: {
         level: 'info',
-        redact: REDACT_CONFIG,
+        redact: LOG_REDACT_CONFIG,
         stream,
       },
     });
@@ -68,7 +41,7 @@ describe('Pino Log Redaction', () => {
     const app = Fastify({
       logger: {
         level: 'info',
-        redact: REDACT_CONFIG,
+        redact: LOG_REDACT_CONFIG,
         stream,
       },
     });
@@ -90,7 +63,7 @@ describe('Pino Log Redaction', () => {
     const app = Fastify({
       logger: {
         level: 'debug',
-        redact: REDACT_CONFIG,
+        redact: LOG_REDACT_CONFIG,
         stream,
       },
     });
@@ -119,7 +92,7 @@ describe('Pino Log Redaction', () => {
     const app = Fastify({
       logger: {
         level: 'info',
-        redact: REDACT_CONFIG,
+        redact: LOG_REDACT_CONFIG,
         stream,
       },
     });
@@ -149,7 +122,7 @@ describe('Pino Log Redaction', () => {
     const app = Fastify({
       logger: {
         level: 'info',
-        redact: REDACT_CONFIG,
+        redact: LOG_REDACT_CONFIG,
         stream,
       },
     });

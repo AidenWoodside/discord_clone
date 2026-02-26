@@ -37,16 +37,19 @@ describe('CORS Origin Restriction', () => {
     expect(response.headers['access-control-allow-credentials']).toBe('true');
   });
 
-  it('rejects requests from unknown origins via CORS headers', async () => {
+  it('does not reflect unknown origins in CORS headers', async () => {
     const response = await app.inject({
       method: 'GET',
       url: '/api/test',
       headers: { origin: 'https://evil-site.com' },
     });
 
-    // Fastify still processes the request but does NOT set CORS allow headers
-    // The browser enforces the CORS policy based on missing/mismatched headers
-    expect(response.headers['access-control-allow-origin']).not.toBe('https://evil-site.com');
+    // @fastify/cors with a string origin always returns the configured origin,
+    // never reflecting the requesting origin. The browser compares this header
+    // against its own origin and blocks the response if they don't match.
+    const allowOrigin = response.headers['access-control-allow-origin'];
+    expect(allowOrigin).not.toBe('https://evil-site.com');
+    expect(allowOrigin).toBe(ALLOWED_ORIGIN);
   });
 
   it('handles preflight OPTIONS requests correctly for allowed origin', async () => {
@@ -63,7 +66,7 @@ describe('CORS Origin Restriction', () => {
     expect(response.headers['access-control-allow-origin']).toBe(ALLOWED_ORIGIN);
   });
 
-  it('does not set allow-origin for preflight from unknown origin', async () => {
+  it('does not reflect unknown origins in preflight response', async () => {
     const response = await app.inject({
       method: 'OPTIONS',
       url: '/api/test',
@@ -73,6 +76,8 @@ describe('CORS Origin Restriction', () => {
       },
     });
 
-    expect(response.headers['access-control-allow-origin']).not.toBe('https://malicious.com');
+    const allowOrigin = response.headers['access-control-allow-origin'];
+    expect(allowOrigin).not.toBe('https://malicious.com');
+    expect(allowOrigin).toBe(ALLOWED_ORIGIN);
   });
 });

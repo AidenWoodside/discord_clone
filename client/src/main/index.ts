@@ -6,6 +6,7 @@ import { registerSafeStorageHandlers } from './safeStorage';
 function setupContentSecurityPolicy(): void {
   const apiUrl = is.dev ? 'http://localhost:3000' : (process.env.API_URL || 'http://localhost:3000');
   const wsUrl = is.dev ? 'ws://localhost:3000' : (process.env.WS_URL || 'ws://localhost:3000');
+  const wssUrl = wsUrl.replace(/^ws:/, 'wss:');
 
   // In development, allow the electron-vite dev server for HMR
   const devSources = is.dev ? ' http://localhost:* ws://localhost:*' : '';
@@ -14,7 +15,7 @@ function setupContentSecurityPolicy(): void {
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
-    `connect-src ${apiUrl} ${wsUrl} wss: ws:${devSources}`,
+    `connect-src ${apiUrl} ${wsUrl} ${wssUrl}${devSources}`,
     "media-src 'self' blob: mediastream:",
     "img-src 'self' data: blob:",
     "font-src 'self'",

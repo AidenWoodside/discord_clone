@@ -12,33 +12,13 @@ import adminRoutes from './plugins/admin/adminRoutes.js';
 import wsServer from './ws/wsServer.js';
 import { initMediasoup, setLogger, closeMediasoup } from './plugins/voice/mediasoupManager.js';
 import { registerVoiceHandlers } from './plugins/voice/voiceWsHandler.js';
+import { LOG_REDACT_CONFIG } from './config/logRedaction.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : 'info'),
-      redact: {
-        paths: [
-          'req.headers.authorization',
-          'req.body.password',
-          'req.body.encryptedContent',
-          'req.body.encrypted_content',
-          'req.body.nonce',
-          'encrypted_content',
-          'nonce',
-          'password',
-          'passwordHash',
-          'password_hash',
-          'refreshToken',
-          'refresh_token',
-          'accessToken',
-          'access_token',
-          'groupEncryptionKey',
-          'privateKey',
-          'secret',
-        ],
-        censor: '[REDACTED]',
-      },
+      redact: LOG_REDACT_CONFIG,
       transport:
         process.env.NODE_ENV === 'development'
           ? { target: 'pino-pretty', options: { colorize: true } }

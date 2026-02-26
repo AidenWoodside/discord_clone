@@ -306,15 +306,17 @@ Claude Opus 4.6
 ### Change Log
 
 - 2026-02-25: Implemented privacy enforcement and zero telemetry — added Pino redaction, CSP headers, CORS restriction, no-console ESLint rule, and 4 privacy audit test files (14 new tests)
+- 2026-02-25: Code review fixes (5 issues) — restricted CSP connect-src from wildcard wss:/ws: to specific server URLs, added transitive dependency audit via package-lock.json, extracted Pino redaction config to shared module, documented API_URL/WS_URL env vars, strengthened CORS test assertions
 
 ### File List
 
-- `server/src/app.ts` — Modified: Pino redaction config (17 paths), CORS restriction (`CLIENT_ORIGIN`), production log level default (`warn`)
-- `client/src/main/index.ts` — Modified: CSP enforcement via `session.defaultSession.webRequest.onHeadersReceived`
+- `server/src/app.ts` — Modified: Pino redaction config imported from shared module, CORS restriction (`CLIENT_ORIGIN`), production log level default (`warn`)
+- `server/src/config/logRedaction.ts` — New: Shared Pino redaction config (17 sensitive field paths)
+- `client/src/main/index.ts` — Modified: CSP enforcement via `session.defaultSession.webRequest.onHeadersReceived`, connect-src restricted to specific server URLs (no wildcard wss:/ws:)
 - `eslint.config.mjs` — Modified: Added `no-console: 'error'` rule for `server/src/**/*.ts`
-- `.env.example` — Modified: Added `LOG_LEVEL` production docs, `CLIENT_ORIGIN` config
+- `.env.example` — Modified: Added `LOG_LEVEL` production docs, `CLIENT_ORIGIN` config, `API_URL`/`WS_URL` Electron CSP docs
 - `.env` — Modified: Added `CLIENT_ORIGIN=http://localhost:5173`
-- `server/src/privacy/dependencyAudit.test.ts` — New: Dependency tree telemetry audit (3 tests)
+- `server/src/privacy/dependencyAudit.test.ts` — New: Dependency tree telemetry audit including transitive deps via package-lock.json (4 tests)
 - `server/src/privacy/noOutboundRequests.test.ts` — New: Server outbound request scan (2 tests)
-- `server/src/privacy/pinoRedaction.test.ts` — New: Log redaction verification (5 tests)
-- `server/src/privacy/corsRestriction.test.ts` — New: CORS origin restriction (4 tests)
+- `server/src/privacy/pinoRedaction.test.ts` — New: Log redaction verification using shared config (5 tests)
+- `server/src/privacy/corsRestriction.test.ts` — New: CORS origin restriction with precise assertions (4 tests)

@@ -48,6 +48,18 @@ function getAllDependencyNames(packageJsonPath: string): string[] {
   ];
 }
 
+function getTransitiveDependencyNames(lockfilePath: string): string[] {
+  const raw = readFileSync(lockfilePath, 'utf-8');
+  const lockfile = JSON.parse(raw);
+  // npm lockfile v3 uses "packages" with node_modules/ prefixed keys
+  if (lockfile.packages) {
+    return Object.keys(lockfile.packages)
+      .filter((key) => key !== '')
+      .map((key) => key.replace(/.*node_modules\//, ''));
+  }
+  return [];
+}
+
 function findTelemetryPackages(deps: string[]): string[] {
   return deps.filter((dep) => {
     const lower = dep.toLowerCase();
@@ -74,6 +86,17 @@ describe('Dependency Audit: Zero Telemetry Packages', () => {
     const violations = findTelemetryPackages(deps);
 
     expect(violations).toEqual([]);
+  });
+
+  it('full transitive dependency tree contains no telemetry packages', () => {
+    const lockfilePath = join(rootDir, 'package-lock.json');
+    const allTransitiveDeps = getTransitiveDependencyNames(lockfilePath);
+    const violations = findTelemetryPackages(allTransitiveDeps);
+
+    expect(
+      violations,
+      `Telemetry packages found in transitive dependencies:\n${violations.join('\n')}`,
+    ).toEqual([]);
   });
 
   it('blocklist covers all known telemetry package families', () => {

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import * as voiceService from '../services/voiceService';
 import * as mediaService from '../services/mediaService';
 import * as vadService from '../services/vadService';
-import { playConnectSound, playDisconnectSound } from '../utils/soundPlayer';
+import { playConnectSound, playDisconnectSound, playMuteSound, playUnmuteSound } from '../utils/soundPlayer';
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
@@ -21,6 +21,9 @@ interface VoiceState {
   speakingUsers: Set<string>;
   isVideoEnabled: boolean;
   videoParticipants: Set<string>;
+  selectedAudioInputId: string | null;
+  selectedAudioOutputId: string | null;
+  remoteMuteState: Map<string, { muted: boolean; deafened: boolean }>;
 
   joinChannel: (channelId: string, userId: string) => Promise<void>;
   leaveChannel: () => Promise<void>;
@@ -36,6 +39,9 @@ interface VoiceState {
   removeVideoParticipant: (userId: string) => void;
   clearError: () => void;
   syncParticipants: (participants: { userId: string; channelId: string }[]) => void;
+  setAudioInputDevice: (deviceId: string | null) => void;
+  setAudioOutputDevice: (deviceId: string | null) => void;
+  setRemoteMuteState: (userId: string, muted: boolean, deafened: boolean) => void;
 }
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({
@@ -50,6 +56,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   speakingUsers: new Set<string>(),
   isVideoEnabled: false,
   videoParticipants: new Set(),
+  selectedAudioInputId: localStorage.getItem('voiceInputDeviceId') ?? null,
+  selectedAudioOutputId: localStorage.getItem('voiceOutputDeviceId') ?? null,
+  remoteMuteState: new Map(),
 
   joinChannel: async (channelId: string, userId: string) => {
     const state = get();
@@ -135,6 +144,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       isVideoEnabled: false,
       videoParticipants: new Set(),
       channelParticipants: participants,
+      remoteMuteState: new Map(),
     });
 
     playDisconnectSound();
@@ -154,6 +164,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       isVideoEnabled: false,
       videoParticipants: new Set(),
       channelParticipants: new Map(),
+      remoteMuteState: new Map(),
     });
   },
 
@@ -180,7 +191,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       }
       const speakingUsers = new Set(state.speakingUsers);
       speakingUsers.delete(userId);
-      return { channelParticipants: participants, speakingUsers };
+      const remoteMuteState = new Map(state.remoteMuteState);
+      remoteMuteState.delete(userId);
+      return { channelParticipants: participants, speakingUsers, remoteMuteState };
     });
   },
 
@@ -204,15 +217,18 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (newMuted) {
       mediaService.muteAudio();
       vadService.stopLocalVAD();
+      playMuteSound();
       // Clear self from speaking users when muting
       if (state.currentUserId) {
         const speakingUsers = new Set(state.speakingUsers);
         speakingUsers.delete(state.currentUserId);
         set({ isMuted: true, speakingUsers });
-        return;
+      } else {
+        set({ isMuted: true });
       }
     } else {
       mediaService.unmuteAudio();
+      playUnmuteSound();
       // Restart local VAD
       const localStream = mediaService.getLocalStream();
       if (localStream && state.currentUserId) {
@@ -221,8 +237,19 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           useVoiceStore.getState().setSpeaking(userId, speaking);
         });
       }
+      set({ isMuted: false });
     }
-    set({ isMuted: newMuted });
+    // Broadcast voice:state to peers
+    const afterState = get();
+    if (afterState.currentChannelId && afterState.currentUserId) {
+      voiceService.broadcastVoiceState({
+        userId: afterState.currentUserId,
+        channelId: afterState.currentChannelId,
+        muted: afterState.isMuted,
+        deafened: afterState.isDeafened,
+        speaking: false,
+      });
+    }
   },
 
   toggleDeafen: () => {
@@ -251,6 +278,17 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         }
       }
       set({ isDeafened: false, isMuted: wasMutedBeforeDeafen });
+    }
+    // Broadcast voice:state to peers
+    const afterState = get();
+    if (afterState.currentChannelId && afterState.currentUserId) {
+      voiceService.broadcastVoiceState({
+        userId: afterState.currentUserId,
+        channelId: afterState.currentChannelId,
+        muted: afterState.isMuted,
+        deafened: afterState.isDeafened,
+        speaking: false,
+      });
     }
   },
 
@@ -301,5 +339,47 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       map.set(p.channelId, list);
     }
     set({ channelParticipants: map });
+  },
+
+  setAudioInputDevice: (deviceId: string | null) => {
+    if (deviceId) {
+      localStorage.setItem('voiceInputDeviceId', deviceId);
+    } else {
+      localStorage.removeItem('voiceInputDeviceId');
+    }
+    set({ selectedAudioInputId: deviceId });
+    // If currently in voice, hot-swap the input device
+    if (get().currentChannelId) {
+      const userId = get().currentUserId;
+      const vadCallback = userId
+        ? (speaking: boolean) => { useVoiceStore.getState().setSpeaking(userId, speaking); }
+        : undefined;
+      mediaService.switchAudioInput(deviceId, vadCallback).catch((err) => {
+        console.warn('[useVoiceStore] Failed to switch audio input:', err);
+      });
+    }
+  },
+
+  setAudioOutputDevice: (deviceId: string | null) => {
+    if (deviceId) {
+      localStorage.setItem('voiceOutputDeviceId', deviceId);
+    } else {
+      localStorage.removeItem('voiceOutputDeviceId');
+    }
+    set({ selectedAudioOutputId: deviceId });
+    // If currently in voice, hot-swap the output device
+    if (get().currentChannelId) {
+      mediaService.switchAudioOutput(deviceId).catch((err) => {
+        console.warn('[useVoiceStore] Failed to switch audio output:', err);
+      });
+    }
+  },
+
+  setRemoteMuteState: (userId: string, muted: boolean, deafened: boolean) => {
+    set((state) => {
+      const remoteMuteState = new Map(state.remoteMuteState);
+      remoteMuteState.set(userId, { muted, deafened });
+      return { remoteMuteState };
+    });
   },
 }));

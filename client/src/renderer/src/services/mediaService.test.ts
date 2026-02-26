@@ -20,6 +20,13 @@ vi.mock('./wsClient', () => ({
   },
 }));
 
+vi.mock('./vadService', () => ({
+  stopLocalVAD: vi.fn(),
+  startLocalVAD: vi.fn(),
+  stopRemoteVAD: vi.fn(),
+  stopAllVAD: vi.fn(),
+}));
+
 import {
   initDevice,
   getDevice,
@@ -42,7 +49,10 @@ import {
   deafenAudio,
   undeafenAudio,
   getLocalStream,
+  switchAudioInput,
+  switchAudioOutput,
 } from './mediaService';
+import * as vadService from './vadService';
 
 // Store originals for cleanup
 const originalNavigator = globalThis.navigator;
@@ -796,6 +806,239 @@ describe('mediaService', () => {
 
       expect(mockVideoTrack.stop).toHaveBeenCalled();
       expect(getLocalVideoStream()).toBeNull();
+    });
+  });
+
+  describe('switchAudioInput', () => {
+    function setupProducer() {
+      const oldTrack = { kind: 'audio', stop: vi.fn(), enabled: true };
+      const oldStream = { getAudioTracks: () => [oldTrack], getTracks: () => [oldTrack] };
+      const newTrack = { kind: 'audio', stop: vi.fn(), enabled: true };
+      const newStream = { getAudioTracks: () => [newTrack], getTracks: () => [newTrack] };
+      const mockReplaceTrack = vi.fn().mockResolvedValue(undefined);
+
+      Object.defineProperty(globalThis, 'navigator', {
+        value: {
+          mediaDevices: {
+            getUserMedia: vi.fn()
+              .mockResolvedValueOnce(oldStream)
+              .mockResolvedValueOnce(newStream),
+          },
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      const transport = makeMockTransport('send-1');
+      transport.produce = vi.fn().mockResolvedValue({
+        id: 'producer-id',
+        track: oldTrack,
+        on: vi.fn(),
+        close: vi.fn(),
+        replaceTrack: mockReplaceTrack,
+      });
+      mockCreateSendTransport.mockReturnValue(transport);
+
+      return { oldTrack, oldStream, newTrack, newStream, transport, mockReplaceTrack };
+    }
+
+    it('calls getUserMedia with deviceId constraint', async () => {
+      const { transport } = setupProducer();
+      await initDevice({ codecs: [] } as Parameters<typeof initDevice>[0]);
+      createSendTransport(
+        { id: 'send-1', iceParameters: {}, iceCandidates: [], dtlsParameters: {} } as unknown as Parameters<typeof createSendTransport>[0],
+        [],
+      );
+      await produceAudio(transport as unknown as Parameters<typeof produceAudio>[0]);
+
+      await switchAudioInput('new-mic-id');
+
+      expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith({
+        audio: { deviceId: { exact: 'new-mic-id' } },
+      });
+    });
+
+    it('calls producer.replaceTrack', async () => {
+      const { transport, mockReplaceTrack } = setupProducer();
+      await initDevice({ codecs: [] } as Parameters<typeof initDevice>[0]);
+      createSendTransport(
+        { id: 'send-1', iceParameters: {}, iceCandidates: [], dtlsParameters: {} } as unknown as Parameters<typeof createSendTransport>[0],
+        [],
+      );
+      await produceAudio(transport as unknown as Parameters<typeof produceAudio>[0]);
+
+      await switchAudioInput('new-mic-id');
+
+      expect(mockReplaceTrack).toHaveBeenCalledWith({ track: expect.any(Object) });
+    });
+
+    it('stops old tracks', async () => {
+      const { transport, oldTrack } = setupProducer();
+      await initDevice({ codecs: [] } as Parameters<typeof initDevice>[0]);
+      createSendTransport(
+        { id: 'send-1', iceParameters: {}, iceCandidates: [], dtlsParameters: {} } as unknown as Parameters<typeof createSendTransport>[0],
+        [],
+      );
+      await produceAudio(transport as unknown as Parameters<typeof produceAudio>[0]);
+
+      await switchAudioInput('new-mic-id');
+
+      expect(oldTrack.stop).toHaveBeenCalled();
+    });
+
+    it('restarts local VAD', async () => {
+      const { transport } = setupProducer();
+      await initDevice({ codecs: [] } as Parameters<typeof initDevice>[0]);
+      createSendTransport(
+        { id: 'send-1', iceParameters: {}, iceCandidates: [], dtlsParameters: {} } as unknown as Parameters<typeof createSendTransport>[0],
+        [],
+      );
+      await produceAudio(transport as unknown as Parameters<typeof produceAudio>[0]);
+      const mockCallback = vi.fn();
+
+      await switchAudioInput('new-mic-id', mockCallback);
+
+      expect(vadService.stopLocalVAD).toHaveBeenCalled();
+      expect(vadService.startLocalVAD).toHaveBeenCalled();
+    });
+
+    it('preserves muted state on new track', async () => {
+      const oldTrack = { kind: 'audio', stop: vi.fn(), enabled: false };
+      const oldStream = { getAudioTracks: () => [oldTrack], getTracks: () => [oldTrack] };
+      const newTrack = { kind: 'audio', stop: vi.fn(), enabled: true };
+      const newStream = { getAudioTracks: () => [newTrack], getTracks: () => [newTrack] };
+
+      Object.defineProperty(globalThis, 'navigator', {
+        value: {
+          mediaDevices: {
+            getUserMedia: vi.fn()
+              .mockResolvedValueOnce(oldStream)
+              .mockResolvedValueOnce(newStream),
+          },
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      const transport = makeMockTransport('send-1');
+      transport.produce = vi.fn().mockResolvedValue({
+        id: 'producer-id',
+        track: oldTrack,
+        on: vi.fn(),
+        close: vi.fn(),
+        replaceTrack: vi.fn().mockResolvedValue(undefined),
+      });
+      mockCreateSendTransport.mockReturnValue(transport);
+      await initDevice({ codecs: [] } as Parameters<typeof initDevice>[0]);
+      createSendTransport(
+        { id: 'send-1', iceParameters: {}, iceCandidates: [], dtlsParameters: {} } as unknown as Parameters<typeof createSendTransport>[0],
+        [],
+      );
+      await produceAudio(transport as unknown as Parameters<typeof produceAudio>[0]);
+
+      await switchAudioInput('new-mic-id');
+
+      expect(newTrack.enabled).toBe(false);
+    });
+
+    it('handles error and keeps old stream active', async () => {
+      const oldTrack = { kind: 'audio', stop: vi.fn(), enabled: true };
+      const oldStream = { getAudioTracks: () => [oldTrack], getTracks: () => [oldTrack] };
+
+      Object.defineProperty(globalThis, 'navigator', {
+        value: {
+          mediaDevices: {
+            getUserMedia: vi.fn()
+              .mockResolvedValueOnce(oldStream)
+              .mockRejectedValueOnce(new Error('Device not found')),
+          },
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      const transport = makeMockTransport('send-1');
+      transport.produce = vi.fn().mockResolvedValue({
+        id: 'producer-id',
+        track: oldTrack,
+        on: vi.fn(),
+        close: vi.fn(),
+        replaceTrack: vi.fn(),
+      });
+      mockCreateSendTransport.mockReturnValue(transport);
+      await initDevice({ codecs: [] } as Parameters<typeof initDevice>[0]);
+      createSendTransport(
+        { id: 'send-1', iceParameters: {}, iceCandidates: [], dtlsParameters: {} } as unknown as Parameters<typeof createSendTransport>[0],
+        [],
+      );
+      await produceAudio(transport as unknown as Parameters<typeof produceAudio>[0]);
+
+      await switchAudioInput('bad-device');
+
+      // Old stream should still be active (tracks not stopped)
+      expect(getLocalStream()).toBe(oldStream);
+    });
+  });
+
+  describe('switchAudioOutput', () => {
+    it('calls setSinkId on all consumer audio elements', async () => {
+      const mockSetSinkId = vi.fn().mockResolvedValue(undefined);
+      const mockPlay = vi.fn().mockResolvedValue(undefined);
+      globalThis.Audio = function MockAudio(this: Record<string, unknown>) {
+        this.play = mockPlay;
+        this.pause = vi.fn();
+        this.srcObject = null;
+        this.setSinkId = mockSetSinkId;
+      } as unknown as typeof Audio;
+      globalThis.MediaStream = function MockMediaStream() {
+        return {};
+      } as unknown as typeof MediaStream;
+
+      const transport = makeMockTransport('recv-1');
+      await consumeAudio(
+        transport as unknown as Parameters<typeof consumeAudio>[0],
+        {
+          consumerId: 'c-1',
+          producerId: 'p-1',
+          kind: 'audio',
+          rtpParameters: {} as Parameters<typeof consumeAudio>[1]['rtpParameters'],
+        },
+      );
+
+      await switchAudioOutput('speaker-1');
+
+      expect(mockSetSinkId).toHaveBeenCalledWith('speaker-1');
+    });
+
+    it('new consumers use stored output device', async () => {
+      const mockSetSinkId = vi.fn().mockResolvedValue(undefined);
+      const mockPlay = vi.fn().mockResolvedValue(undefined);
+      globalThis.Audio = function MockAudio(this: Record<string, unknown>) {
+        this.play = mockPlay;
+        this.pause = vi.fn();
+        this.srcObject = null;
+        this.setSinkId = mockSetSinkId;
+      } as unknown as typeof Audio;
+      globalThis.MediaStream = function MockMediaStream() {
+        return {};
+      } as unknown as typeof MediaStream;
+
+      // Set output device first
+      await switchAudioOutput('speaker-1');
+
+      // Then consume audio — should use stored device
+      const transport = makeMockTransport('recv-1');
+      await consumeAudio(
+        transport as unknown as Parameters<typeof consumeAudio>[0],
+        {
+          consumerId: 'c-1',
+          producerId: 'p-1',
+          kind: 'audio',
+          rtpParameters: {} as Parameters<typeof consumeAudio>[1]['rtpParameters'],
+        },
+      );
+
+      expect(mockSetSinkId).toHaveBeenCalledWith('speaker-1');
     });
   });
 });

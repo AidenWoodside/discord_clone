@@ -1,6 +1,7 @@
 import React from 'react';
 import { Settings } from 'lucide-react';
 import useAuthStore from '../../stores/useAuthStore';
+import { useUIStore } from '../../stores/useUIStore';
 import { getAvatarColor } from '../../utils/avatarColor';
 
 export function UserPanel(): React.ReactNode {
@@ -32,6 +33,7 @@ export function UserPanel(): React.ReactNode {
       {/* Settings button */}
       <button
         aria-label="User settings"
+        onClick={() => useUIStore.getState().setSettingsOpen(true)}
         className="ml-auto text-text-secondary hover:text-text-primary transition-colors duration-150 p-1 rounded focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:ring-offset-0 focus-visible:outline-none"
       >
         <Settings size={18} />

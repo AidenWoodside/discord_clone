@@ -6,6 +6,7 @@ vi.mock('../services/voiceService', () => ({
   cleanupMedia: vi.fn(),
   startVideo: vi.fn().mockResolvedValue(undefined),
   stopVideo: vi.fn(),
+  broadcastVoiceState: vi.fn(),
 }));
 
 vi.mock('../services/mediaService', () => ({
@@ -14,6 +15,8 @@ vi.mock('../services/mediaService', () => ({
   deafenAudio: vi.fn(),
   undeafenAudio: vi.fn(),
   getLocalStream: vi.fn().mockReturnValue(null),
+  switchAudioInput: vi.fn().mockResolvedValue(undefined),
+  switchAudioOutput: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../services/vadService', () => ({
@@ -25,13 +28,22 @@ vi.mock('../services/vadService', () => ({
 vi.mock('../utils/soundPlayer', () => ({
   playConnectSound: vi.fn(),
   playDisconnectSound: vi.fn(),
+  playMuteSound: vi.fn(),
+  playUnmuteSound: vi.fn(),
+}));
+
+vi.mock('../services/wsClient', () => ({
+  wsClient: {
+    send: vi.fn(),
+    request: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 import { useVoiceStore } from './useVoiceStore';
 import * as voiceService from '../services/voiceService';
 import * as mediaService from '../services/mediaService';
 import * as vadService from '../services/vadService';
-import { playConnectSound, playDisconnectSound } from '../utils/soundPlayer';
+import { playConnectSound, playDisconnectSound, playMuteSound, playUnmuteSound } from '../utils/soundPlayer';
 
 const mockJoin = vi.mocked(voiceService.joinVoiceChannel);
 const mockLeave = vi.mocked(voiceService.leaveVoiceChannel);
@@ -49,7 +61,11 @@ beforeEach(() => {
     speakingUsers: new Set<string>(),
     isVideoEnabled: false,
     videoParticipants: new Set(),
+    selectedAudioInputId: null,
+    selectedAudioOutputId: null,
+    remoteMuteState: new Map(),
   });
+  localStorage.clear();
   vi.clearAllMocks();
 });
 
@@ -608,6 +624,157 @@ describe('useVoiceStore', () => {
       useVoiceStore.getState().localCleanup();
 
       expect(useVoiceStore.getState().speakingUsers.size).toBe(0);
+    });
+
+    it('clears remoteMuteState', () => {
+      useVoiceStore.setState({
+        currentChannelId: 'voice-ch-1',
+        currentUserId: 'my-user-id',
+        connectionState: 'connected',
+        remoteMuteState: new Map([['user-1', { muted: true, deafened: false }]]),
+      });
+
+      useVoiceStore.getState().localCleanup();
+
+      expect(useVoiceStore.getState().remoteMuteState.size).toBe(0);
+    });
+  });
+
+  describe('setAudioInputDevice', () => {
+    it('updates selectedAudioInputId', () => {
+      useVoiceStore.getState().setAudioInputDevice('mic-1');
+      expect(useVoiceStore.getState().selectedAudioInputId).toBe('mic-1');
+    });
+
+    it('calls mediaService.switchAudioInput with VAD callback when in voice', () => {
+      useVoiceStore.setState({ currentChannelId: 'ch-1', currentUserId: 'user-1' });
+      useVoiceStore.getState().setAudioInputDevice('mic-1');
+      expect(mediaService.switchAudioInput).toHaveBeenCalledWith('mic-1', expect.any(Function));
+    });
+
+    it('does NOT call mediaService when not in voice', () => {
+      useVoiceStore.getState().setAudioInputDevice('mic-1');
+      expect(mediaService.switchAudioInput).not.toHaveBeenCalled();
+    });
+
+    it('persists to localStorage', () => {
+      useVoiceStore.getState().setAudioInputDevice('mic-1');
+      expect(localStorage.getItem('voiceInputDeviceId')).toBe('mic-1');
+    });
+
+    it('removes from localStorage when set to null', () => {
+      localStorage.setItem('voiceInputDeviceId', 'mic-1');
+      useVoiceStore.getState().setAudioInputDevice(null);
+      expect(localStorage.getItem('voiceInputDeviceId')).toBeNull();
+    });
+  });
+
+  describe('setAudioOutputDevice', () => {
+    it('updates selectedAudioOutputId', () => {
+      useVoiceStore.getState().setAudioOutputDevice('spk-1');
+      expect(useVoiceStore.getState().selectedAudioOutputId).toBe('spk-1');
+    });
+
+    it('calls mediaService.switchAudioOutput when in voice', () => {
+      useVoiceStore.setState({ currentChannelId: 'ch-1', currentUserId: 'user-1' });
+      useVoiceStore.getState().setAudioOutputDevice('spk-1');
+      expect(mediaService.switchAudioOutput).toHaveBeenCalledWith('spk-1');
+    });
+
+    it('does NOT call mediaService when not in voice', () => {
+      useVoiceStore.getState().setAudioOutputDevice('spk-1');
+      expect(mediaService.switchAudioOutput).not.toHaveBeenCalled();
+    });
+
+    it('persists to localStorage', () => {
+      useVoiceStore.getState().setAudioOutputDevice('spk-1');
+      expect(localStorage.getItem('voiceOutputDeviceId')).toBe('spk-1');
+    });
+  });
+
+  describe('setRemoteMuteState', () => {
+    it('adds remote user mute state', () => {
+      useVoiceStore.getState().setRemoteMuteState('user-1', true, false);
+      expect(useVoiceStore.getState().remoteMuteState.get('user-1')).toEqual({ muted: true, deafened: false });
+    });
+
+    it('updates existing remote user state', () => {
+      useVoiceStore.getState().setRemoteMuteState('user-1', true, false);
+      useVoiceStore.getState().setRemoteMuteState('user-1', false, true);
+      expect(useVoiceStore.getState().remoteMuteState.get('user-1')).toEqual({ muted: false, deafened: true });
+    });
+  });
+
+  describe('removePeer clears remoteMuteState', () => {
+    it('clears remote mute state for departed user', () => {
+      useVoiceStore.setState({
+        channelParticipants: new Map([['ch-1', ['user-1', 'user-2']]]),
+        remoteMuteState: new Map([
+          ['user-1', { muted: true, deafened: false }],
+          ['user-2', { muted: false, deafened: false }],
+        ]),
+      });
+
+      useVoiceStore.getState().removePeer('ch-1', 'user-1');
+
+      expect(useVoiceStore.getState().remoteMuteState.has('user-1')).toBe(false);
+      expect(useVoiceStore.getState().remoteMuteState.has('user-2')).toBe(true);
+    });
+  });
+
+  describe('leaveChannel clears remoteMuteState', () => {
+    it('clears all remote mute state on leave', async () => {
+      useVoiceStore.setState({
+        currentChannelId: 'voice-ch-1',
+        currentUserId: 'my-user-id',
+        connectionState: 'connected',
+        channelParticipants: new Map([['voice-ch-1', ['my-user-id']]]),
+        remoteMuteState: new Map([['user-1', { muted: true, deafened: false }]]),
+      });
+      mockLeave.mockResolvedValueOnce(undefined);
+
+      await useVoiceStore.getState().leaveChannel();
+
+      expect(useVoiceStore.getState().remoteMuteState.size).toBe(0);
+    });
+  });
+
+  describe('toggleMute sends voice:state', () => {
+    it('broadcasts voice:state when muting', () => {
+      useVoiceStore.setState({ currentChannelId: 'ch-1', currentUserId: 'user-1' });
+      useVoiceStore.getState().toggleMute();
+      expect(voiceService.broadcastVoiceState).toHaveBeenCalledWith(expect.objectContaining({
+        userId: 'user-1',
+        muted: true,
+      }));
+    });
+
+    it('plays mute sound when muting', () => {
+      useVoiceStore.getState().toggleMute();
+      expect(playMuteSound).toHaveBeenCalled();
+    });
+
+    it('plays unmute sound when unmuting', () => {
+      useVoiceStore.setState({ isMuted: true });
+      useVoiceStore.getState().toggleMute();
+      expect(playUnmuteSound).toHaveBeenCalled();
+    });
+  });
+
+  describe('toggleDeafen sends voice:state', () => {
+    it('broadcasts voice:state when deafening', () => {
+      useVoiceStore.setState({ currentChannelId: 'ch-1', currentUserId: 'user-1' });
+      useVoiceStore.getState().toggleDeafen();
+      expect(voiceService.broadcastVoiceState).toHaveBeenCalledWith(expect.objectContaining({
+        userId: 'user-1',
+        deafened: true,
+      }));
+    });
+
+    it('does NOT play mute sound when deafening', () => {
+      useVoiceStore.getState().toggleDeafen();
+      expect(playMuteSound).not.toHaveBeenCalled();
+      expect(playUnmuteSound).not.toHaveBeenCalled();
     });
   });
 });

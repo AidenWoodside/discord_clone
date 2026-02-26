@@ -36,3 +36,11 @@ export function playConnectSound(): void {
 export function playDisconnectSound(): void {
   playTone([660, 440], 0.3);
 }
+
+export function playMuteSound(): void {
+  playTone([330], 0.1);
+}
+
+export function playUnmuteSound(): void {
+  playTone([440], 0.1);
+}

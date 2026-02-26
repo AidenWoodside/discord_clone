@@ -9,6 +9,7 @@ import { wsClient } from '../../services/wsClient';
 import { ChannelSidebar } from '../channels/ChannelSidebar';
 import { MemberList } from '../members/MemberList';
 import { VideoGrid } from '../voice/VideoGrid';
+import { SettingsPage } from '../settings/SettingsPage';
 
 const MEMBER_LIST_BREAKPOINT = 1000;
 
@@ -20,6 +21,8 @@ export function AppLayout(): React.ReactNode {
   const fetchMembers = useMemberStore((s) => s.fetchMembers);
   const accessToken = useAuthStore((s) => s.accessToken);
   const wasAutoCollapsed = useRef(false);
+  const isSettingsOpen = useUIStore((s) => s.isSettingsOpen);
+  const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
 
   useEffect(() => {
     fetchChannels();
@@ -102,10 +105,16 @@ export function AppLayout(): React.ReactNode {
         <ChannelSidebar />
       </nav>
       <main aria-label="Channel content" className="flex-1 min-w-0 bg-bg-primary flex flex-col">
-        {hasVideoParticipants && <VideoGrid />}
-        <Outlet />
+        {isSettingsOpen ? (
+          <SettingsPage onClose={() => setSettingsOpen(false)} />
+        ) : (
+          <>
+            {hasVideoParticipants && <VideoGrid />}
+            <Outlet />
+          </>
+        )}
       </main>
-      {isMemberListVisible && (
+      {isMemberListVisible && !isSettingsOpen && (
         <aside aria-label="Member list" className="w-[240px] flex-shrink-0 bg-bg-secondary">
           <MemberList />
         </aside>

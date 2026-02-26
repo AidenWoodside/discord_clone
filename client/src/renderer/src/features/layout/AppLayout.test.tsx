@@ -5,7 +5,13 @@ import { useChannelStore } from '../../stores/useChannelStore';
 import { useMemberStore } from '../../stores/useMemberStore';
 import { useUIStore } from '../../stores/useUIStore';
 import useAuthStore from '../../stores/useAuthStore';
+import { useVoiceStore } from '../../stores/useVoiceStore';
 import { AppLayout } from './AppLayout';
+
+vi.mock('../../services/mediaService', () => ({
+  getLocalVideoStream: vi.fn().mockReturnValue(null),
+  getVideoStreamByPeerId: vi.fn().mockReturnValue(null),
+}));
 
 beforeAll(() => {
   window.api = {
@@ -82,5 +88,47 @@ describe('AppLayout', () => {
     renderLayout();
     const nav = screen.getByRole('navigation');
     expect(nav.className).toContain('w-[240px]');
+  });
+
+  it('renders VideoGrid when videoParticipants has entries', async () => {
+    const mediaService = await import('../../services/mediaService');
+    (mediaService.getLocalVideoStream as ReturnType<typeof vi.fn>).mockReturnValue({ id: 'local-stream' });
+
+    useVoiceStore.setState({
+      currentChannelId: 'voice-1',
+      videoParticipants: new Set(['u1']),
+      speakingUsers: new Set(),
+    });
+
+    renderLayout();
+
+    expect(screen.getByText('testuser')).toBeInTheDocument();
+  });
+
+  it('does not render VideoGrid when videoParticipants is empty', () => {
+    useVoiceStore.setState({
+      currentChannelId: 'voice-1',
+      videoParticipants: new Set(),
+      speakingUsers: new Set(),
+    });
+
+    const { container } = renderLayout();
+
+    // VideoGrid returns null — no grid element
+    const grid = container.querySelector('.grid.gap-2');
+    expect(grid).toBeNull();
+  });
+
+  it('does not render VideoGrid when not in a voice channel', () => {
+    useVoiceStore.setState({
+      currentChannelId: null,
+      videoParticipants: new Set(),
+      speakingUsers: new Set(),
+    });
+
+    const { container } = renderLayout();
+
+    const grid = container.querySelector('.grid.gap-2');
+    expect(grid).toBeNull();
   });
 });

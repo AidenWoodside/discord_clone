@@ -8,6 +8,7 @@ import { useVoiceStore } from '../../stores/useVoiceStore';
 import { wsClient } from '../../services/wsClient';
 import { ChannelSidebar } from '../channels/ChannelSidebar';
 import { MemberList } from '../members/MemberList';
+import { VideoGrid } from '../voice/VideoGrid';
 
 const MEMBER_LIST_BREAKPOINT = 1000;
 
@@ -100,6 +101,7 @@ export function AppLayout(): React.ReactNode {
         <ChannelSidebar />
       </nav>
       <main aria-label="Channel content" className="flex-1 min-w-0 bg-bg-primary flex flex-col">
+        <VideoGrid />
         <Outlet />
       </main>
       {isMemberListVisible && (

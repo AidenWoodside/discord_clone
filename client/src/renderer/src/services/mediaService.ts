@@ -14,7 +14,7 @@ let localStream: MediaStream | null = null;
 let videoProducer: types.Producer | null = null;
 let localVideoStream: MediaStream | null = null;
 const consumers = new Map<string, { consumer: types.Consumer; audio: HTMLAudioElement }>();
-const videoConsumers = new Map<string, { consumer: types.Consumer; element: HTMLVideoElement }>();
+const videoConsumers = new Map<string, { consumer: types.Consumer; element: HTMLVideoElement; peerId: string }>();
 
 export function getDevice(): Device | null {
   return device;
@@ -202,6 +202,7 @@ export function getLocalVideoStream(): MediaStream | null {
 export async function consumeVideo(
   transport: types.Transport,
   params: { consumerId: string; producerId: string; kind: 'video'; rtpParameters: types.RtpParameters },
+  peerId: string,
 ): Promise<types.Consumer> {
   const consumer = await transport.consume({
     id: params.consumerId,
@@ -216,13 +217,22 @@ export async function consumeVideo(
   video.playsInline = true;
   video.muted = true;
 
-  videoConsumers.set(consumer.id, { consumer, element: video });
+  videoConsumers.set(consumer.id, { consumer, element: video, peerId });
 
   return consumer;
 }
 
-export function getVideoConsumers(): Map<string, { consumer: types.Consumer; element: HTMLVideoElement }> {
+export function getVideoConsumers(): Map<string, { consumer: types.Consumer; element: HTMLVideoElement; peerId: string }> {
   return videoConsumers;
+}
+
+export function getVideoStreamByPeerId(peerId: string): MediaStream | null {
+  for (const entry of videoConsumers.values()) {
+    if (entry.peerId === peerId) {
+      return new MediaStream([entry.consumer.track]);
+    }
+  }
+  return null;
 }
 
 export function removeVideoConsumerByProducerId(producerId: string): void {

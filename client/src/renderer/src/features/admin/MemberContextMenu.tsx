@@ -28,7 +28,7 @@ export function MemberContextMenu({ userId, username, children }: MemberContextM
   return (
     <>
       <RadixContextMenu.Root>
-        <RadixContextMenu.Trigger asChild>{children}</RadixContextMenu.Trigger>
+        <RadixContextMenu.Trigger asChild><div>{children}</div></RadixContextMenu.Trigger>
         <RadixContextMenu.Portal>
           <RadixContextMenu.Content className="min-w-[180px] rounded-lg bg-bg-floating p-1.5 shadow-lg">
             <RadixContextMenu.Item

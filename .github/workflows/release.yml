@@ -86,11 +86,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
-          # Find the draft release for this tag and publish it
-          RELEASE_ID=$(gh api repos/AidenWoodside/discord_clone/releases --jq ".[] | select(.tag_name==\"$TAG\") | .id")
-          if [ -n "$RELEASE_ID" ]; then
-            gh api --method PATCH "repos/AidenWoodside/discord_clone/releases/$RELEASE_ID" -f draft=false
-            echo "Published release $TAG"
+          # Find draft releases for this tag and publish them
+          RELEASE_IDS=$(gh api repos/AidenWoodside/discord_clone/releases --jq "[.[] | select(.tag_name==\"$TAG\") | .id] | .[]")
+          if [ -n "$RELEASE_IDS" ]; then
+            echo "$RELEASE_IDS" | while read -r ID; do
+              gh api --method PATCH "repos/AidenWoodside/discord_clone/releases/$ID" -f draft=false
+              echo "Published release $TAG (ID: $ID)"
+            done
           else
             # Check if a published release already exists
             PUBLISHED=$(gh api repos/AidenWoodside/discord_clone/releases/tags/$TAG --jq '.id' 2>/dev/null || echo "")

@@ -8,6 +8,7 @@ export function RegisterPage(): React.ReactNode {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const { register, isLoading, error, clearError } = useAuthStore();
 
   if (!token) {
@@ -21,7 +22,7 @@ export function RegisterPage(): React.ReactNode {
     );
   }
 
-  const canSubmit = username.trim().length > 0 && password.length >= 8 && !isLoading;
+  const canSubmit = username.trim().length > 0 && password.length >= 8 && password === confirmPassword && !isLoading;
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -64,6 +65,19 @@ export function RegisterPage(): React.ReactNode {
 
           {password.length > 0 && password.length < 8 && (
             <p className="text-sm text-text-muted">Password must be at least 8 characters.</p>
+          )}
+
+          <Input
+            label="Confirm Password"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Re-enter your password"
+            autoComplete="new-password"
+          />
+
+          {confirmPassword.length > 0 && password !== confirmPassword && (
+            <p className="text-sm text-text-muted">Passwords do not match.</p>
           )}
 
           {error && (

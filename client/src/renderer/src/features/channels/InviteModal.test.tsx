@@ -104,7 +104,7 @@ describe('InviteModal', () => {
 
     await waitFor(() => {
       expect(clipSpy).toHaveBeenCalledWith(
-        expect.stringContaining('/#/register/abc123'),
+        'discord-clone://invite/abc123',
       );
     });
   });

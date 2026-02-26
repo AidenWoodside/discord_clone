@@ -176,7 +176,9 @@ jobs:
               echo "Saved current image for rollback: $CURRENT_IMAGE_ID"
             fi
 
-            # Deploy: pull latest code, rebuild, restart
+            # Deploy: discard any local changes, pull latest code, rebuild, restart
+            git checkout -- . 2>/dev/null || true
+            git clean -fd 2>/dev/null || true
             git pull origin main || { echo "DEPLOY FAILED — git pull failed"; exit 1; }
             sudo docker compose build app || {
               echo "DEPLOY FAILED — docker build failed. Reverting git..."

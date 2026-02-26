@@ -65,6 +65,7 @@ jobs:
         run: npm run build -w client
 
       - name: Build and publish Electron app
+        shell: bash
         run: |
           VERSION=$(node -p "require('./package.json').version")
           cd client && npx electron-builder --publish always -c.extraMetadata.version=$VERSION

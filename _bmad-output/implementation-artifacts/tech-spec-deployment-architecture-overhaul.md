@@ -5,8 +5,8 @@ created: '2026-02-27'
 status: 'ready-for-dev'
 stepsCompleted: [1, 2, 3, 4]
 tech_stack: ['Docker Compose', 'GHCR', 'Trivy', 'AWS SSM', 'AWS OIDC', 'Terraform', 'CloudWatch', 'Nginx 1.27-alpine', 'GitHub Actions', 'coturn/coturn:4.6.3', 'certbot/certbot:v3.1.0', 'node:20-alpine']
-files_to_modify: ['docker-compose.yml', '.github/workflows/release.yml', 'docker/nginx/nginx.conf', 'docker/nginx/nginx.conf.template', 'server/Dockerfile', 'server/src/index.ts', 'scripts/setup.sh', 'scripts/deploy.sh', '.env.example', 'docker/coturn/turnserver.prod.conf', 'infrastructure/main.tf']
-code_patterns: ['GitHub Actions OIDC federation', 'AWS SSM Run Command with structured status parsing', 'Blue-green Docker deployment with split mediasoup UDP ranges', 'GHCR image tagging (SHA + semver + latest)', 'Terraform HCL for EC2 + IAM + SG', 'Fastify onClose hook for graceful shutdown', 'Docker Compose profiles for deploy-only containers', 'nginx upstream switching via template + nginx -t validation + reload', 'Transient secrets env file from SSM Parameter Store']
+files_to_modify: ['docker-compose.yml', '.github/workflows/release.yml', 'docker/nginx/nginx.conf', 'docker/nginx/nginx.conf.template', 'server/Dockerfile', 'server/src/index.ts', 'scripts/setup.sh', 'scripts/deploy.sh', 'scripts/rollback-config.sh', '.env.example', 'docker/coturn/turnserver.prod.conf', 'infrastructure/main.tf', 'infrastructure/bootstrap/main.tf']
+code_patterns: ['GitHub Actions OIDC federation', 'AWS SSM Run Command with structured status parsing', 'Blue-green Docker deployment with split mediasoup UDP ranges', 'GHCR image tagging (SHA + semver + latest)', 'Terraform HCL for EC2 + IAM + SG + S3', 'Fastify onClose hook for graceful shutdown', 'Docker Compose profiles for deploy-only containers', 'nginx upstream switching via template + nginx -t validation + reload', 'SSM secrets passed as environment overrides (no file on disk)', 'Application-level connection draining via /api/drain endpoint', 'Database migration guard via RUN_MIGRATIONS env var']
 test_patterns: ['No automated tests — infrastructure validated by dry-run, health checks, and manual verification', 'Blue-green rollback tested by deploying broken image', 'CloudWatch verified by checking log group population']
 ---
 
@@ -27,15 +27,15 @@ Implement the full deployment architecture review across 6 phased stories — fr
 ### Scope
 
 **In Scope:**
-- **Phase 1:** Docker Compose hardening (resource limits, log rotation, health check start_period, image pinning, security_opt, depends_on conditions, named volumes)
+- **Phase 1:** Docker Compose hardening (resource limits, log rotation, health check start_period, image pinning, security_opt, depends_on conditions, named volumes) + minimal server lifecycle changes for container orchestration (SIGTERM handler, graceful shutdown)
 - **Phase 2:** GHCR container registry + Trivy scanning + image-based rollback
 - **Phase 3:** Bridge networking for app/nginx/certbot (100-port mediasoup range), host mode only for coturn
 - **Phase 4:** AWS SSM + OIDC replacing SSH deployment, environment protection rules, close port 22
-- **Phase 5:** Blue-green deployment (app-blue/app-green, deploy script, nginx upstream switching)
+- **Phase 5:** Blue-green deployment (app-blue/app-green, deploy script, nginx upstream switching, connection draining)
 - **Phase 6:** SSM Parameter Store secrets, CloudWatch log shipping, Terraform IaC, uptime monitoring, deploy failure notifications
 
 **Out of Scope:**
-- Application code changes (Fastify, React, mediasoup logic)
+- Application feature/logic changes (Fastify routes, React UI, mediasoup call logic)
 - Database migrations or schema changes
 - Electron client build/distribution changes
 - Multi-instance / auto-scaling architecture
@@ -119,15 +119,16 @@ Implement the full deployment architecture review across 6 phased stories — fr
 
 - **Registry:** GHCR (free, native GitHub Actions integration via `GITHUB_TOKEN`, zero additional config)
 - **Image tagging:** Triple-tag every build: git SHA (immutable traceability), semver (human-readable rollback), `latest` (convenience, never pinned in production)
-- **Networking:** Custom `backend` bridge network for app/nginx/certbot. Host mode only for coturn (UDP relay needs raw port access). Mediasoup port range reduced from 40000-49999 to 40000-40099 (100 ports via `.env`)
+- **Networking:** Custom `backend` bridge network for app/nginx/certbot. Host mode only for coturn (UDP relay needs raw port access). Mediasoup port range reduced from 40000-49999 to 40000-40099 (100 ports via `.env`). **Capacity analysis:** Each mediasoup WebRtcTransport consumes 1 UDP port for ICE. Each peer in a voice channel needs ~2 ports (send + receive transport). With blue-green split (50 ports per slot), each slot supports ~25 concurrent voice users. This is acceptable for the project's expected scale. If concurrent voice users exceed 20, widen the range (e.g., 40000-40499 per slot), update the security group, and redeploy
 - **Deployment method:** AWS SSM + OIDC — short-lived credentials, no SSH keys, no port 22, full CloudTrail audit. IAM role trust policy scoped to `repo:AidenWoodside/discord_clone:ref:refs/tags/v*`
 - **Zero-downtime:** Blue-green with `app-blue` (port 3001, UDP 40000-40049) and `app-green` (port 3002, UDP 40050-40099). Deploy script determines active slot by inspecting running containers (no ephemeral state file). Nginx upstream switched via template (`nginx.conf.template` with `{{UPSTREAM}}` placeholder) + `nginx -t` validation + `nginx -s reload`, with full rollback on failure. Green uses Docker Compose `profiles: [deploy]` — only started during deploys. Both slots use `restart: unless-stopped` for crash recovery
-- **Graceful shutdown:** Add SIGTERM handler to `server/src/index.ts` calling `app.close()` — prerequisite for blue-green to avoid dropped connections. `stop_grace_period: 30s` on both app containers
+- **Graceful shutdown:** Add SIGTERM handler to `server/src/index.ts` calling `app.close()` (Phase 1, Task 1.9 — container lifecycle hygiene, not deferred to Phase 5). `stop_grace_period: 30s` on both app containers
 - **Secrets:** AWS SSM Parameter Store with `SecureString` type (KMS encryption). Fetched at deploy time, passed as env vars — no `.env` file on disk. Secrets: `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `TURN_SECRET`, `GROUP_ENCRYPTION_KEY`
 - **Logging:** Phase 1 uses `json-file` driver with `max-size: 10m`, `max-file: 5`. Phase 6 switches to `awslogs` driver shipping to CloudWatch log groups `/discord-clone/production/{service}`
 - **IaC:** Terraform for EC2 instance, security group (443, 80, 3478 UDP, 49152-49252 UDP, 40000-40099 UDP), IAM role + instance profile (SSM + CloudWatch), OIDC provider. State stored in S3 + DynamoDB lock
 - **Uptime:** External monitoring service (UptimeRobot/Better Stack) hitting `https://discweeds.com/api/health` every 60s
 - **Deploy notifications:** Discord webhook on GitHub Actions failure — POST to `DEPLOY_WEBHOOK_URL` secret
+- **Docker Compose version:** Requires Docker Compose V2 >= 2.20 (the `docker compose` plugin, not the standalone `docker-compose` V1 binary). Required for `--status` filter in `docker compose ps`, `profiles` behavior, and structured output. The deploy script validates this at startup. Ubuntu 22.04's `apt install docker-compose-plugin` provides V2 but may need a manual update for >= 2.20. The `scripts/setup.sh` and Terraform EC2 user_data should install the correct version
 - **Cert renewal:** Add daily cron on host to `docker compose exec nginx nginx -s reload` after certbot renews
 - **Image pinning:** `nginx:1.27-alpine`, `coturn/coturn:4.6.3`, `certbot/certbot:v3.1.0` (all third-party images pinned — certbot handles TLS certs and a broken upstream causes total site unavailability)
 
@@ -139,7 +140,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
 
 ### Phase 1: Docker Compose Hardening
 
-**Story:** As the server operator, I want hardened Docker Compose configuration with resource limits, log rotation, security options, and proper dependency management so that the deployment is resilient and follows container security best practices.
+**Story:** As the server operator, I want hardened Docker Compose configuration with resource limits, log rotation, security options, proper dependency management, and graceful shutdown so that the deployment is resilient and follows container security best practices.
 
 **Prerequisites:** None — this phase has no external dependencies.
 
@@ -222,6 +223,20 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
   - Action: In GitHub Settings > Environments, create a `production` environment. Add required reviewers (owner). Set branch restriction to tags matching `v*`. Add `environment: production` to the `deploy-server` job in `release.yml`
   - Notes: This is a manual GitHub Settings change plus a one-line addition to `release.yml`
 
+- [ ] Task 1.9: Add SIGTERM handler to server entry point
+  - File: `server/src/index.ts`
+  - Action: After `await app.listen(...)`, add:
+    ```typescript
+    const shutdown = async () => {
+      app.log.info('SIGTERM received, shutting down gracefully...');
+      await app.close();
+      process.exit(0);
+    };
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+    ```
+  - Notes: This ensures `app.close()` is called, which triggers the `onClose` hook that calls `closeMediasoup()`. Without this, Docker's SIGTERM is ignored and the process is force-killed after `stop_grace_period`. This is container lifecycle hygiene — required for clean shutdowns regardless of blue-green deployment. Moving this to Phase 1 allows early validation of graceful shutdown behavior
+
 #### Acceptance Criteria
 
 - [ ] AC 1.1: Given the updated `docker-compose.yml`, when `docker compose config` is run, then it validates without errors and all services show resource limits, logging config, and security options
@@ -231,6 +246,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
 - [ ] AC 1.5: Given the app container is running, when `docker inspect` is run on it, then `NoNewPrivileges` is `true` and `CapDrop` includes `ALL`
 - [ ] AC 1.6: Given the SQLite named volume, when `docker compose down` is run (without `-v`), then the database data persists and is available on next `docker compose up`
 - [ ] AC 1.7: Given `deploy-server` job has `environment: production`, when a tag is pushed, then GitHub requires manual approval before the deploy job runs
+- [ ] AC 1.8: Given SIGTERM is sent to the app container, when `docker stop` is called, then `app.close()` executes, mediasoup workers are shut down, and in-flight requests complete before exit
 
 ---
 
@@ -278,20 +294,29 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     ```
   - Notes: `IMAGE_TAG` env var controls which version runs. Defaults to `latest` for convenience, but deploy scripts should always set an explicit tag
 
-- [ ] Task 2.4: Update deploy-server job to pull instead of build
+- [ ] Task 2.4a: Remove source-code build from deploy
   - File: `.github/workflows/release.yml`
   - Action: Update `deploy-server` job:
     - Add `needs: [publish-release, build-server-image]` (depends on image being pushed)
-    - Replace the SSH deploy script's `git pull` + `docker compose build` with:
+    - Remove `docker compose build` from the SSH deploy script — images now come from GHCR
+    - Remove `git checkout` and `git clean` commands (no longer building from source)
+    - Replace with:
       ```bash
       export IMAGE_TAG="${{ github.ref_name }}"
       docker compose pull app
       docker compose up -d app nginx
       ```
-    - Remove the `git checkout`, `git clean`, `git pull` commands — EC2 no longer needs source code for the app image
-    - Keep the SCP step for uploading download assets (landing page still needs installers)
     - Update rollback to use registry: on health check failure, set `IMAGE_TAG` to previous known version and `docker compose pull app && docker compose up -d app`
-  - Notes: The EC2 instance still needs the `docker-compose.yml`, `nginx.conf`, coturn config, and landing page files on disk. Only the app image comes from the registry. Git pull is still needed for those config files (or they can be managed separately later)
+
+- [ ] Task 2.4b: Keep config file sync as a separate deploy step
+  - File: `.github/workflows/release.yml`
+  - Action: Keep `git pull` (or replace with a targeted fetch) as a separate step that syncs only config files the EC2 instance needs on disk:
+    ```bash
+    git fetch origin main
+    git checkout origin/main -- docker-compose.yml docker/ scripts/ landing/
+    ```
+    Keep the SCP step for uploading download assets (landing page still needs installers)
+  - Notes: The EC2 instance needs `docker-compose.yml`, `nginx.conf`, coturn config, landing page, and deploy scripts on disk. Only the app image comes from the registry. This step is explicitly separate from the image pull to make the two concerns (app image vs config files) independently manageable
 
 - [ ] Task 2.5: Authenticate EC2 with GHCR for image pulls
   - File: Deploy script (within SSH action in `release.yml`)
@@ -331,7 +356,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     networks:
       - backend
     ports:
-      - "3001:3001"
+      - "3000:3000"
       - "40000-40099:40000-40099/udp"
     ```
     Add networks section:
@@ -340,20 +365,14 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
       backend:
         driver: bridge
     ```
-  - Notes: App port changes from 3000 to 3001 (preparation for blue-green in Phase 5 where blue=3001, green=3002). The 100-port UDP range is for mediasoup RTP. This is a key trade-off: 100 concurrent media streams max, which is plenty for this project
+  - Notes: App stays on port 3000 (the default). Port changes to 3001/3002 happen in Phase 5 when blue-green requires it. The 100-port UDP range is for mediasoup RTP
 
 - [ ] Task 3.2: Update .env.example with reduced mediasoup port range
   - File: `.env.example`
   - Action: Change `MEDIASOUP_MIN_PORT=40000` and `MEDIASOUP_MAX_PORT=49999` to `MEDIASOUP_MAX_PORT=40099`. Add comment: `# Reduced to 100 ports for Docker bridge networking compatibility`
   - Notes: Also update the production `.env` on EC2 during deployment
 
-- [ ] Task 3.3: Update app PORT environment variable
-  - File: `docker-compose.yml`
-  - Action: Add `environment: - PORT=3001` to the app service (overrides default 3000)
-  - File: `.env.example`
-  - Action: Update comment for PORT to note production uses 3001 for blue-green prep
-
-- [ ] Task 3.4: Move nginx off host mode
+- [ ] Task 3.3: Move nginx off host mode
   - File: `docker-compose.yml`
   - Action: Remove `network_mode: host` from `nginx`. Add:
     ```yaml
@@ -364,7 +383,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
       - "443:443"
     ```
 
-- [ ] Task 3.5: Move certbot off host mode
+- [ ] Task 3.4: Move certbot off host mode
   - File: `docker-compose.yml`
   - Action: Remove `network_mode: host` from `certbot` (if present — certbot currently inherits host mode). Add:
     ```yaml
@@ -373,7 +392,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     ```
     Certbot needs no ports — it only accesses shared volumes for ACME challenge
 
-- [ ] Task 3.6: Keep coturn on host mode (justified)
+- [ ] Task 3.5: Keep coturn on host mode (justified)
   - File: `docker-compose.yml`
   - Action: Keep `network_mode: host` on `coturn`. Add a comment:
     ```yaml
@@ -382,23 +401,28 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     ```
   - Notes: Coturn stays on host mode. This is the only service that genuinely needs it
 
-- [ ] Task 3.7: Update nginx upstream to use Docker DNS
+- [ ] Task 3.6: Update nginx upstream to use Docker DNS
   - File: `docker/nginx/nginx.conf`
-  - Action: Change upstream from `server 127.0.0.1:3000;` to `server app:3001;` (Docker DNS resolves `app` to the container's bridge IP). Note: in Phase 5 this becomes `app-blue:3001` or dynamically switched
-  - Notes: Docker bridge networking provides automatic DNS resolution between containers on the same network
+  - Action: Change upstream from `server 127.0.0.1:3000;` to `server app:3000;` (Docker DNS resolves `app` to the container's bridge IP). Note: in Phase 5 this changes to `app-blue:3001` via template
+  - Notes: Docker bridge networking provides automatic DNS resolution between containers on the same network. Port stays at 3000 — the port change to 3001/3002 is deferred to Phase 5 where blue-green requires it
 
-- [ ] Task 3.8: Update app health check URL for new port
-  - File: `docker-compose.yml`
-  - Action: Update health check from `http://127.0.0.1:3000/api/health` to `http://127.0.0.1:3001/api/health`
+- [ ] Task 3.7: Update setup.sh certbot from standalone to webroot mode
+  - File: `scripts/setup.sh`
+  - Action: Replace the certbot standalone provisioning with webroot-based initial provisioning:
+    1. Start nginx first with a temporary HTTP-only config (no TLS) that serves `/.well-known/acme-challenge/` from the shared certbot volume
+    2. Run certbot in webroot mode: `certbot certonly --webroot -w /var/www/certbot -d discweeds.com`
+    3. After cert is provisioned, switch nginx to the full TLS config and reload
+  - Notes: Standalone mode binds directly to port 80, which won't work after Phase 3 moves certbot to bridge networking with no published ports. Webroot mode writes ACME challenge files to a shared volume that nginx serves — this works on bridge networking. **Disaster recovery:** If certs must be re-provisioned from scratch (new domain, cert corruption), either: (a) use this same webroot flow with nginx running, or (b) temporarily add `ports: ["80:80"]` to certbot in `docker-compose.yml`, stop nginx, run standalone, remove the port, restart. Document this as an operational runbook entry
 
 #### Acceptance Criteria
 
 - [ ] AC 3.1: Given app, nginx, and certbot are on the `backend` bridge network, when `docker network inspect backend` is run, then all three containers are listed as connected
 - [ ] AC 3.2: Given coturn remains on `network_mode: host`, when a TURN relay is established, then UDP traffic flows correctly on ports 49152-49252
-- [ ] AC 3.3: Given nginx uses Docker DNS (`app:3001`), when a request hits `https://discweeds.com/api/health`, then nginx proxies it to the app container and returns 200
+- [ ] AC 3.3: Given nginx uses Docker DNS (`app:3000`), when a request hits `https://discweeds.com/api/health`, then nginx proxies it to the app container and returns 200
 - [ ] AC 3.4: Given WebSocket proxy uses Docker DNS, when a client connects to `wss://discweeds.com/ws`, then the WebSocket upgrade succeeds and messages flow
 - [ ] AC 3.5: Given mediasoup uses ports 40000-40099, when a voice call is established, then RTP media flows over the published UDP port range
 - [ ] AC 3.6: Given the app container is compromised, when it attempts to access coturn's listening port (3478) or host SSH (22), then the bridge network prevents direct access (traffic must go through published ports only)
+- [ ] AC 3.7: Given certbot is on bridge networking with no published ports, when `scripts/setup.sh` provisions a TLS certificate via webroot mode, then the certificate is issued successfully using the shared ACME challenge volume served by nginx
 
 ---
 
@@ -500,7 +524,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
           done
       ```
     - Keep the download asset upload step but convert from SCP to SSM (or use S3 as intermediary)
-  - Notes: Health check URL is now port 3001 (from Phase 3). `EC2_INSTANCE_ID` is a new secret
+  - Notes: Health check URL is port 3000 (Phase 3 keeps default port; changes to 3001/3002 in Phase 5). `EC2_INSTANCE_ID` is a new secret
 
 - [ ] Task 4.5: Handle download asset upload without SCP
   - File: `.github/workflows/release.yml`
@@ -532,38 +556,24 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
 
 ### Phase 5: Blue-Green Zero-Downtime Deployment
 
-**Story:** As the server operator, I want zero-downtime deployments via blue-green container switching so that users never experience dropped WebSocket connections or interrupted voice calls during deploys.
+**Story:** As the server operator, I want zero-downtime deployments via blue-green container switching with application-level connection draining so that users experience minimal disruption during deploys — connected clients receive a reconnect signal and migrate to the new slot within a configurable drain window.
 
-**Prerequisites:** Phase 2 (registry images), Phase 3 (bridge networking), Phase 4 (SSM deploy). Also requires SIGTERM handler in server code.
+**Prerequisites:** Phase 2 (registry images), Phase 3 (bridge networking), Phase 4 (SSM deploy). SIGTERM handler already added in Phase 1 (Task 1.9).
 
 #### Tasks
 
-- [ ] Task 5.1: Add SIGTERM handler to server entry point
-  - File: `server/src/index.ts`
-  - Action: After `await app.listen(...)`, add:
-    ```typescript
-    const shutdown = async () => {
-      app.log.info('SIGTERM received, shutting down gracefully...');
-      await app.close();
-      process.exit(0);
-    };
-    process.on('SIGTERM', shutdown);
-    process.on('SIGINT', shutdown);
-    ```
-  - Notes: This ensures `app.close()` is called, which triggers the `onClose` hook that calls `closeMediasoup()`. Without this, Docker's SIGTERM is ignored and the process is force-killed after `stop_grace_period`
-
-- [ ] Task 5.2: Replace single app service with blue-green pair
+- [ ] Task 5.1: Replace single app service with blue-green pair
   - File: `docker-compose.yml`
-  - Action: Replace the `app` service with `app-blue` and `app-green`:
-    - `app-blue`: image `ghcr.io/aidenwoodside/discord-clone-server:${IMAGE_TAG:-latest}`, port 3001, networks `backend`, `restart: unless-stopped`, all resource limits/logging/security from Phase 1, health check on port 3001, mediasoup ports 40000-40049
-    - `app-green`: identical but port 3002, health check on port 3002, `restart: unless-stopped`, `profiles: [deploy]` (only started during deploys), mediasoup ports 40050-40099
+  - Action: Replace the `app` service with `app-blue` and `app-green`. This is where the port changes from 3000 (Phase 3 default) to 3001/3002 for the two slots:
+    - `app-blue`: image `ghcr.io/aidenwoodside/discord-clone-server:${IMAGE_TAG:-latest}`, `PORT=3001`, networks `backend`, `restart: unless-stopped`, all resource limits/logging/security from Phase 1, health check on port 3001, mediasoup ports 40000-40049
+    - `app-green`: identical but `PORT=3002`, health check on port 3002, `restart: unless-stopped`, `profiles: [deploy]` (only started during deploys), mediasoup ports 40050-40099
     - Both share the `sqlite_data` volume
-    - Both have `stop_grace_period: 30s`
+    - Both have `stop_grace_period: 30s`, `RUN_MIGRATIONS=false`
     - Published ports: `3001:3001` for blue, `3002:3002` for green
     - UDP ports: `40000-40049:40000-40049/udp` for blue, `40050-40099:40050-40099/udp` for green (split ranges allow simultaneous binding during switchover)
-  - Notes: Green uses `profiles: [deploy]` so it doesn't start on regular `docker compose up -d`. Only `docker compose --profile deploy up -d app-green` starts it. Both slots use `restart: unless-stopped` so that whichever slot is active will auto-recover on crash or EC2 reboot. The `profiles` directive controls initial startup only — it does not affect restart behavior of already-running containers. The deploy script stops the old slot after switchover, so only one slot is running at steady state
+  - Notes: Port change from 3000 to 3001/3002 is intentionally deferred to this phase — Phase 3 uses the default port 3000 for independence. Green uses `profiles: [deploy]` so it doesn't start on regular `docker compose up -d`. Only `docker compose --profile deploy up -d app-green` starts it. Both slots use `restart: unless-stopped` so that whichever slot is active will auto-recover on crash or EC2 reboot. The `profiles` directive controls initial startup only — it does not affect restart behavior of already-running containers. The deploy script stops the old slot after switchover, so only one slot is running at steady state
 
-- [ ] Task 5.3: Split mediasoup UDP port ranges for blue-green
+- [ ] Task 5.2: Split mediasoup UDP port ranges for blue-green
   - File: `docker-compose.yml`
   - Action: Use separate UDP ranges so both slots can bind simultaneously during switchover:
     ```yaml
@@ -589,20 +599,25 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
   - Action: Update comments to document the split: `# Blue: 40000-40049, Green: 40050-40099 (50 ports each for blue-green)`
   - Notes: 50 ports per slot supports 50 concurrent media streams each. Both slots can bind their ranges simultaneously, enabling true zero-downtime switchover where existing voice calls on the old slot drain naturally while new calls land on the new slot. The security group and Terraform config already allow the full 40000-40099 range, so no infrastructure changes are needed
 
-- [ ] Task 5.4: Create deploy script
+- [ ] Task 5.3: Create deploy script
   - File: `scripts/deploy.sh` (new file)
   - Action: Create deployment script:
     ```bash
     #!/usr/bin/env bash
     set -euo pipefail
+
+    # Require Docker Compose V2 >= 2.20
+    if ! docker compose version --short 2>/dev/null | grep -qE '^2\.(2[0-9]|[3-9][0-9]|[0-9]{3,})'; then
+      echo "FATAL: Docker Compose V2 >= 2.20 required"
+      exit 1
+    fi
+
     DEPLOY_DIR="/home/ubuntu/discord_clone"
+    DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-30}"
     IMAGE_TAG="${1:?Usage: deploy.sh <image-tag>}"
     export IMAGE_TAG
 
-    # 1. Pull the new image
-    docker compose pull app-blue app-green
-
-    # 2. Determine active slot by inspecting running containers (not a file)
+    # 1. Determine active slot by inspecting running containers (not a file)
     if docker compose ps app-blue --status running -q 2>/dev/null | grep -q .; then
       ACTIVE="blue"; ACTIVE_PORT=3001
       NEW="green"; NEW_PORT=3002
@@ -615,6 +630,9 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
       NEW="blue"; NEW_PORT=3001
     fi
     echo "Active: $ACTIVE -> Deploying: $NEW"
+
+    # 2. Pull only the target slot image
+    docker compose pull "app-$NEW"
 
     # 3. Start new slot (no traffic routed yet — nginx still points at old slot)
     docker compose --profile deploy up -d "app-$NEW"
@@ -633,13 +651,44 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
       sleep 2
     done
 
-    # 5. Switch nginx upstream via template (not in-place sed)
+    # 5. Run database migrations on new slot (only writer — old slot still serves traffic)
+    if ! docker compose exec -T "app-$NEW" node -e "require('./dist/db').migrate()" 2>&1; then
+      echo "FATAL: database migration failed on app-$NEW"
+      docker compose stop "app-$NEW"
+      exit 1
+    fi
+
+    # 6. Drain old slot — signal clients to reconnect
+    if [ "$ACTIVE" != "none" ]; then
+      echo "Draining app-$ACTIVE (${DRAIN_TIMEOUT}s window)..."
+      curl -sf -X POST "http://127.0.0.1:$ACTIVE_PORT/api/drain" > /dev/null 2>&1 || true
+
+      # Wait for connections to drain (poll every 2s, up to DRAIN_TIMEOUT)
+      DRAIN_START=$(date +%s)
+      while true; do
+        ELAPSED=$(( $(date +%s) - DRAIN_START ))
+        if [ "$ELAPSED" -ge "$DRAIN_TIMEOUT" ]; then
+          echo "Drain timeout reached — proceeding with switchover"
+          break
+        fi
+        CONNS=$(curl -sf "http://127.0.0.1:$ACTIVE_PORT/api/drain" 2>/dev/null \
+          | grep -o '"connections":[0-9]*' | grep -o '[0-9]*' || echo "unknown")
+        if [ "$CONNS" = "0" ]; then
+          echo "All connections drained"
+          break
+        fi
+        echo "  $CONNS connections remaining (${ELAPSED}s elapsed)"
+        sleep 2
+      done
+    fi
+
+    # 7. Switch nginx upstream via template (not in-place sed)
     NGINX_CONF="$DEPLOY_DIR/docker/nginx/nginx.conf"
     NGINX_TEMPLATE="$DEPLOY_DIR/docker/nginx/nginx.conf.template"
     cp "$NGINX_CONF" "$NGINX_CONF.bak"
     sed "s/{{UPSTREAM}}/app-$NEW:$NEW_PORT/" "$NGINX_TEMPLATE" > "$NGINX_CONF"
 
-    # 6. Validate nginx config before reload
+    # 8. Validate nginx config before reload
     if ! docker compose exec -T nginx nginx -t 2>&1; then
       echo "FATAL: nginx config validation failed — restoring backup"
       cp "$NGINX_CONF.bak" "$NGINX_CONF"
@@ -647,7 +696,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
       exit 1
     fi
 
-    # 7. Reload nginx
+    # 9. Reload nginx
     if ! docker compose exec -T nginx nginx -s reload 2>&1; then
       echo "FATAL: nginx reload failed — restoring backup"
       cp "$NGINX_CONF.bak" "$NGINX_CONF"
@@ -656,26 +705,24 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
       exit 1
     fi
 
-    # 8. Post-switchover verification
+    # 10. Post-switchover verification — verify nginx can reach new slot via Docker DNS
     sleep 2
-    if ! curl -sf "https://127.0.0.1/api/health" -k > /dev/null 2>&1; then
-      echo "WARNING: post-switchover health check via nginx failed — verify manually"
+    if ! docker compose exec -T nginx curl -sf "http://app-$NEW:$NEW_PORT/api/health" > /dev/null 2>&1; then
+      echo "WARNING: post-switchover health check via nginx->app-$NEW failed — verify manually"
     fi
 
-    # 9. Drain and stop old slot
+    # 11. Stop old slot
     if [ "$ACTIVE" != "none" ]; then
-      echo "Draining app-$ACTIVE for 5s..."
-      sleep 5
       docker compose stop "app-$ACTIVE"
     fi
 
-    # 10. Cleanup
+    # 12. Cleanup
     rm -f "$NGINX_CONF.bak"
     echo "Deploy complete: app-$NEW ($IMAGE_TAG)"
     ```
-  - Notes: Active slot is determined by inspecting which container is actually running (survives reboots, no stale file). Nginx config uses a template file with `{{UPSTREAM}}` placeholder — never raw sed on the live config. `nginx -t` validates before reload, with full rollback on failure at every step. The old slot is stopped only after nginx has switched and been verified, ensuring SQLite is never accessed by two containers simultaneously under load
+  - Notes: Active slot is determined by inspecting which container is actually running (survives reboots, no stale file). Only the target slot's image is pulled (not both). The drain step signals the old slot's connected WebSocket clients to reconnect, then polls until connections reach zero or the `DRAIN_TIMEOUT` (default 30s) expires. Migrations run explicitly on the new slot before nginx switches — the old slot still serves traffic during this window. Nginx config uses a template file with `{{UPSTREAM}}` placeholder — never raw sed on the live config. `nginx -t` validates before reload, with full rollback on failure at every step. Post-switchover verification uses Docker DNS from inside the nginx container to confirm the upstream switch worked. Requires Docker Compose V2 >= 2.20
 
-- [ ] Task 5.5: Create nginx config template for blue-green
+- [ ] Task 5.4: Create nginx config template for blue-green
   - File: `docker/nginx/nginx.conf.template` (new file)
   - Action: Copy `docker/nginx/nginx.conf` to `docker/nginx/nginx.conf.template`. In the template, replace the upstream block with:
     ```nginx
@@ -686,7 +733,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     Set the initial `nginx.conf` (non-template) to `app-blue:3001` as the default. Add `nginx.conf.bak` to `.gitignore`
   - Notes: The deploy script generates `nginx.conf` from the template by replacing `{{UPSTREAM}}` with the target slot (e.g., `app-green:3002`). This is explicit, auditable, and immune to pattern-matching drift. The template is the source of truth; the generated `nginx.conf` is a deployment artifact
 
-- [ ] Task 5.6: Update SSM deploy command to use deploy script
+- [ ] Task 5.5: Update SSM deploy command to use deploy script
   - File: `.github/workflows/release.yml`
   - Action: Update the SSM command in `deploy-server` job to call the deploy script:
     ```
@@ -695,21 +742,40 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     ```
   - Notes: The deploy script handles all blue-green logic. SSM just invokes it
 
-- [ ] Task 5.7: Update nginx depends_on for blue-green
+- [ ] Task 5.6: Add connection drain endpoint to server
+  - File: `server/src/index.ts` (or a dedicated `server/src/plugins/drain.ts` plugin)
+  - Action: Add a `POST /api/drain` endpoint (or listen for `SIGUSR1`) that:
+    1. Sets a `draining` flag that prevents accepting new WebSocket upgrades at `/ws`
+    2. Sends a `{ type: "reconnect" }` frame to all connected WebSocket clients so they reconnect to the new slot via nginx
+    3. Returns a JSON response with `{ "connections": <count> }` showing remaining active connections
+  - Notes: The client-side WebSocket handler must already support reconnection (standard for Discord-style apps). If the client does not have reconnect logic, add a follow-up task to implement it. The drain endpoint is called by the deploy script before switching nginx upstream. The endpoint should NOT be publicly accessible — it is only called from localhost by the deploy script. Add `deny all;` for `/api/drain` in the nginx config and template
+
+- [ ] Task 5.7: Add migration guard environment variable
+  - File: `server/src/index.ts` (or the migration runner entry point)
+  - Action: Add a `RUN_MIGRATIONS` environment variable check (default: `false`). If `RUN_MIGRATIONS` is not explicitly set to `true`, skip all Drizzle migration execution at startup. Add corresponding `RUN_MIGRATIONS=false` to both `app-blue` and `app-green` environment blocks in `docker-compose.yml`
+  - File: `scripts/deploy.sh`
+  - Action: Add an explicit migration step between health check and nginx switchover:
+    ```bash
+    # Run migrations on new slot (only writer at this point — old slot still serves traffic but new slot is not yet receiving requests via nginx)
+    docker compose exec -T "app-$NEW" node -e "require('./dist/db').migrate()"
+    ```
+  - Notes: This ensures migrations run exactly once, on exactly one container, while only one container is writing to the database. The old slot continues serving read-heavy traffic during this window. If the migration fails, the deploy script should stop the new slot and exit 1 (same as health check failure)
+
+- [ ] Task 5.8: Update nginx depends_on for blue-green
   - File: `docker-compose.yml`
   - Action: Change nginx `depends_on` from `app` to `app-blue` with `condition: service_healthy`
 
 #### Acceptance Criteria
 
-- [ ] AC 5.1: Given SIGTERM is sent to the app container, when `docker stop` is called, then `app.close()` executes, mediasoup workers are shut down, and in-flight requests complete before exit
-- [ ] AC 5.2: Given blue is active, when `deploy.sh v1.2.3` runs, then green starts on port 3002, passes health check, nginx switches upstream via template, and blue is stopped only after nginx reload succeeds
-- [ ] AC 5.3: Given green is active, when `deploy.sh v1.2.4` runs, then blue starts on port 3001, passes health check, nginx switches upstream via template, and green is stopped only after nginx reload succeeds
-- [ ] AC 5.4: Given a deploy is in progress, when a client is connected via WebSocket, then the connection is maintained until nginx switches upstream (no dropped connections during the overlap window)
-- [ ] AC 5.5: Given the new slot fails health checks, when the deploy script detects failure, then it stops the new slot and exits with code 1 (old slot remains active, zero impact, nginx config unchanged)
-- [ ] AC 5.6: Given a rollback is needed, when the old container was already stopped, then the operator can run `deploy.sh <previous-tag>` to deploy the previous version from the registry
-- [ ] AC 5.7: Given the EC2 instance reboots, when Docker starts, then the active slot restarts automatically via `restart: unless-stopped` (no dependency on ephemeral state files)
-- [ ] AC 5.8: Given the deploy script generates nginx config from template, when `nginx -t` validation fails, then the backup config is restored, the new slot is stopped, and the script exits with code 1
-- [ ] AC 5.9: Given blue uses mediasoup ports 40000-40049 and green uses 40050-40099, when both slots are briefly running during switchover, then both can bind their UDP ranges simultaneously without conflict
+- [ ] AC 5.1: Given blue is active, when `deploy.sh v1.2.3` runs, then green starts on port 3002, passes health check, the old slot is drained, nginx switches upstream via template, and blue is stopped only after nginx reload succeeds
+- [ ] AC 5.2: Given green is active, when `deploy.sh v1.2.4` runs, then blue starts on port 3001, passes health check, the old slot is drained, nginx switches upstream via template, and green is stopped only after nginx reload succeeds
+- [ ] AC 5.3: Given a deploy is in progress, when the old slot enters drain mode, then connected WebSocket clients receive a reconnect signal and migrate to the new slot within the drain window (default 30s). Connections that do not migrate are terminated when the old slot stops
+- [ ] AC 5.4: Given the new slot fails health checks, when the deploy script detects failure, then it stops the new slot and exits with code 1 (old slot remains active, zero impact, nginx config unchanged)
+- [ ] AC 5.5: Given a rollback is needed, when the old container was already stopped, then the operator can run `deploy.sh <previous-tag>` to deploy the previous version from the registry
+- [ ] AC 5.6: Given the EC2 instance reboots, when Docker starts, then the active slot restarts automatically via `restart: unless-stopped` (no dependency on ephemeral state files)
+- [ ] AC 5.7: Given the deploy script generates nginx config from template, when `nginx -t` validation fails, then the backup config is restored, the new slot is stopped, and the script exits with code 1
+- [ ] AC 5.8: Given blue uses mediasoup ports 40000-40049 and green uses 40050-40099, when both slots are briefly running during switchover, then both can bind their UDP ranges simultaneously without conflict
+- [ ] AC 5.9: Given `RUN_MIGRATIONS` is not set or set to `false`, when the container starts, then zero DDL statements are executed against the database
 
 ---
 
@@ -717,7 +783,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
 
 **Story:** As the server operator, I want centralized secrets in SSM Parameter Store, CloudWatch log shipping, Terraform IaC, external uptime monitoring, and deploy failure notifications so that the infrastructure is observable, reproducible, and self-alerting.
 
-**Prerequisites:** Phase 4 (SSM + OIDC already configured, IAM roles exist).
+**Prerequisites:** Phase 5 complete (blue-green `app-blue`/`app-green` services exist in `docker-compose.yml` — CloudWatch logging and secrets must target these services, not the single `app` service from earlier phases). Phase 4's SSM + OIDC and IAM roles are already in place via Phase 5's prerequisites.
 
 #### Tasks
 
@@ -736,29 +802,28 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     ```
   - Notes: Migrate the existing values from the EC2 `.env` file. `GROUP_ENCRYPTION_KEY` must be preserved (changing it invalidates all encrypted messages)
 
-- [ ] Task 6.2: Update deploy script to fetch secrets from SSM into a transient env file
+- [ ] Task 6.2: Update deploy script to fetch secrets from SSM and pass as environment overrides
   - File: `scripts/deploy.sh`
-  - Action: Before `docker compose up`, fetch secrets from SSM and write to a transient env file with restrictive permissions (never export as shell environment variables, which are visible in `/proc/<pid>/environ` and `docker inspect`):
+  - Action: Before `docker compose up`, fetch secrets from SSM and pass them as explicit `-e` flags to `docker compose`. Do NOT write secrets to a file on disk — pass them directly as environment variables to the `docker compose` command:
     ```bash
-    SECRETS_FILE="/home/ubuntu/discord_clone/.secrets.env"
+    # Fetch secrets from SSM into shell variables (scoped to this script's process only)
+    JWT_ACCESS_SECRET=$(aws ssm get-parameter --name "/discord-clone/prod/JWT_ACCESS_SECRET" --with-decryption --query "Parameter.Value" --output text)
+    JWT_REFRESH_SECRET=$(aws ssm get-parameter --name "/discord-clone/prod/JWT_REFRESH_SECRET" --with-decryption --query "Parameter.Value" --output text)
+    TURN_SECRET=$(aws ssm get-parameter --name "/discord-clone/prod/TURN_SECRET" --with-decryption --query "Parameter.Value" --output text)
+    GROUP_ENCRYPTION_KEY=$(aws ssm get-parameter --name "/discord-clone/prod/GROUP_ENCRYPTION_KEY" --with-decryption --query "Parameter.Value" --output text)
 
-    # Fetch all secrets from SSM path and write to transient file
-    aws ssm get-parameters-by-path \
-      --path "/discord-clone/prod/" \
-      --with-decryption \
-      --query "Parameters[*].[Name,Value]" \
-      --output text | while IFS=$'\t' read -r name value; do
-        key=$(basename "$name")
-        echo "$key=$value"
-    done > "$SECRETS_FILE"
-    chmod 600 "$SECRETS_FILE"
+    # Pass secrets as environment overrides — Docker stores them in the container config
+    # No file on disk, no env_file directive needed
+    export JWT_ACCESS_SECRET JWT_REFRESH_SECRET TURN_SECRET GROUP_ENCRYPTION_KEY
     ```
-    Update `docker-compose.yml` app services to use `env_file: .secrets.env` instead of the old `.env`. After containers start and read their env, securely delete the file:
-    ```bash
-    # After docker compose up succeeds and health check passes:
-    shred -u "$SECRETS_FILE" 2>/dev/null || rm -f "$SECRETS_FILE"
+    Update the `docker compose up` commands in the deploy script to use these exported variables. In `docker-compose.yml`, reference them in the `environment:` block of `app-blue` and `app-green`:
+    ```yaml
+    environment:
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - GROUP_ENCRYPTION_KEY=${GROUP_ENCRYPTION_KEY}
     ```
-  - Notes: EC2 instance profile needs `ssm:GetParameter` and `ssm:GetParametersByPath` permissions with `kms:Decrypt` for the SSM KMS key. Add these to the instance profile IAM role. The transient file approach keeps secrets off the process environment table and out of `docker inspect` output. The file is shredded after container startup. Add `.secrets.env` to `.gitignore` and `.dockerignore`
+  - Notes: EC2 instance profile needs `ssm:GetParameter` and `ssm:GetParametersByPath` permissions with `kms:Decrypt` for the SSM KMS key. This approach avoids the env_file + shred anti-pattern: secrets exist only in the deploy script's process memory and Docker's container config. Container recreation (via `docker compose up -d`) requires re-running the deploy script, which re-fetches from SSM — this is the intended behavior. Secrets are visible in `docker inspect` output on the host, which is acceptable since host access already implies root. Remove any `env_file:` directives from the compose file
 
 - [ ] Task 6.3: Update coturn to use SSM secret
   - File: `scripts/deploy.sh`, `docker/coturn/turnserver.prod.conf`
@@ -788,19 +853,19 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
 
 - [ ] Task 6.4: Switch logging to CloudWatch awslogs driver
   - File: `docker-compose.yml`
-  - Action: Replace `json-file` logging on `app` and `nginx` with:
+  - Action: Replace `json-file` logging on `app-blue`, `app-green`, and `nginx` with:
     ```yaml
     logging:
       driver: awslogs
       options:
         awslogs-region: us-east-1
         awslogs-group: /discord-clone/production/app
-        awslogs-stream-prefix: app
+        awslogs-stream-prefix: app-blue  # or app-green for the green slot
         awslogs-create-group: "true"
     ```
     (Similar for nginx with group `/discord-clone/production/nginx`)
     Keep `json-file` on coturn and certbot (lower priority, less useful in CloudWatch)
-  - Notes: EC2 instance profile needs `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents` permissions. Cost: ~$0.50/GB ingested + $0.03/GB stored
+  - Notes: Both `app-blue` and `app-green` ship to the same log group (`/discord-clone/production/app`) but with different stream prefixes to distinguish them. EC2 instance profile needs `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents` permissions. Cost: ~$0.50/GB ingested + $0.03/GB stored. This task modifies the blue-green `docker-compose.yml` from Phase 5, which is why Phase 6 depends on Phase 5
 
 - [ ] Task 6.5: Add deploy failure notification
   - File: `.github/workflows/release.yml`
@@ -815,19 +880,48 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     ```
   - Notes: `DEPLOY_WEBHOOK_URL` is a Discord webhook URL. Create a webhook in your Discord server's settings
 
-- [ ] Task 6.6: Create Terraform infrastructure code
+- [ ] Task 6.6: Create Terraform bootstrap for state backend
+  - File: `infrastructure/bootstrap/main.tf` (new file)
+  - Action: Create a standalone Terraform config that provisions the state backend resources (chicken-and-egg problem — these must exist before the main config):
+    ```hcl
+    resource "aws_s3_bucket" "terraform_state" {
+      bucket = "discord-clone-terraform-state"
+    }
+    resource "aws_s3_bucket_versioning" "terraform_state" {
+      bucket = aws_s3_bucket.terraform_state.id
+      versioning_configuration { status = "Enabled" }
+    }
+    resource "aws_dynamodb_table" "terraform_locks" {
+      name         = "terraform-locks"
+      billing_mode = "PAY_PER_REQUEST"
+      hash_key     = "LockID"
+      attribute { name = "LockID"; type = "S" }
+    }
+    ```
+  - File: `infrastructure/bootstrap/README.md`
+  - Action: Document the one-time bootstrap process:
+    ```
+    cd infrastructure/bootstrap
+    terraform init
+    terraform apply
+    cd .. && terraform init
+    ```
+  - Notes: Apply this once before the main Terraform config. Uses local state (acceptable for a one-time bootstrap)
+
+- [ ] Task 6.7: Create Terraform infrastructure code
   - File: `infrastructure/main.tf` (new file)
   - Action: Create Terraform config defining:
     - `aws_security_group` with inbound rules: 443/tcp, 80/tcp, 3478/udp, 49152-49252/udp (TURN), 40000-40099/udp (mediasoup). All egress
-    - `aws_instance` with `ami` (Ubuntu 22.04), `instance_type` (t3.medium), `iam_instance_profile`, encrypted root volume (30GB), user_data script for Docker + SSM agent installation
+    - `aws_instance` with `ami` (Ubuntu 22.04), `instance_type` (t3.medium), `iam_instance_profile`, encrypted root volume (30GB), user_data script for Docker + Docker Compose V2 + SSM agent installation
     - `aws_iam_role` for EC2 instance with `AmazonSSMManagedInstanceCore` + CloudWatch Logs + SSM Parameter Store read permissions
     - `aws_iam_instance_profile` attaching the role
     - `aws_iam_openid_connect_provider` for GitHub Actions OIDC
     - `aws_iam_role` for GitHub Actions deploy with trust policy scoped to repo + tags, and SSM + S3 permissions
+    - `aws_s3_bucket` for download assets (`discord-clone-assets`) with versioning and lifecycle policy to expire old assets after 90 days. Add read/write permission to the deploy IAM role
   - File: `infrastructure/variables.tf` (new file)
   - Action: Define variables for `aws_region`, `instance_type`, `ami_id`, `github_repo`
   - File: `infrastructure/outputs.tf` (new file)
-  - Action: Output `instance_id`, `security_group_id`, `deploy_role_arn`, `instance_public_ip`
+  - Action: Output `instance_id`, `security_group_id`, `deploy_role_arn`, `instance_public_ip`, `assets_bucket_name`
   - File: `infrastructure/backend.tf` (new file)
   - Action: Configure S3 backend for state:
     ```hcl
@@ -841,14 +935,14 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
       }
     }
     ```
-  - Notes: Create the S3 bucket and DynamoDB table manually before running `terraform init`. Add `infrastructure/.terraform/` to `.gitignore`
+  - Notes: Run Task 6.6 (bootstrap) first. The assets S3 bucket is required by Phase 4 Task 4.5. The EC2 user_data should install Docker Compose V2 >= 2.20 (required by Phase 5 deploy script). Add `infrastructure/.terraform/` to `.gitignore`
 
-- [ ] Task 6.7: Set up external uptime monitoring
+- [ ] Task 6.8: Set up external uptime monitoring
   - File: N/A (External service)
   - Action: Configure UptimeRobot (free tier) or Better Stack to monitor `https://discweeds.com/api/health` every 60 seconds. Set up email/Discord notifications on downtime
   - Notes: This catches issues that internal health checks miss: DNS failures, certificate expiry, nginx misconfiguration, complete EC2 outage
 
-- [ ] Task 6.8: Add nginx cert reload cron
+- [ ] Task 6.9: Add nginx cert reload cron
   - File: N/A (EC2 crontab) or `scripts/setup.sh`
   - Action: Add to EC2 crontab:
     ```bash
@@ -856,7 +950,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     ```
   - Notes: Runs daily at 3am. After certbot renews the cert, nginx picks it up on reload. Currently nginx serves the old cert until manually restarted
 
-- [ ] Task 6.9: Update .gitignore for Terraform
+- [ ] Task 6.10: Update .gitignore for Terraform
   - File: `.gitignore`
   - Action: Add:
     ```
@@ -867,7 +961,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
 
 #### Acceptance Criteria
 
-- [ ] AC 6.1: Given secrets are stored in SSM Parameter Store, when the deploy script runs, then it fetches secrets from SSM into a transient `.secrets.env` file (chmod 600), passes them to containers, and shreds the file after startup
+- [ ] AC 6.1: Given secrets are stored in SSM Parameter Store, when the deploy script runs, then it fetches secrets from SSM and passes them as environment overrides to `docker compose up` — no secrets file is written to disk
 - [ ] AC 6.1.1: Given SSM-based deploys are verified working, when the legacy `.env` file is checked on EC2, then it does not exist (securely deleted after migration)
 - [ ] AC 6.2: Given the app uses `awslogs` driver, when the app writes a log line via Pino, then it appears in CloudWatch log group `/discord-clone/production/app` within 30 seconds
 - [ ] AC 6.3: Given a deploy fails, when the GitHub Actions job detects failure, then a Discord webhook notification is sent with the failure details and a link to the run
@@ -882,7 +976,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
 ### Dependencies
 
 ```
-Phase 1 (Compose hardening) — no dependencies
+Phase 1 (Compose hardening + SIGTERM handler) — no dependencies
   ↓
 Phase 2 (GHCR + scanning) — depends on Phase 1
   ↓              ↓
@@ -891,24 +985,24 @@ Phase 3          Phase 4
   ↓                ↓
   →  Phase 5  ←  (Blue-green — depends on Phases 2, 3, and 4)
        ↓
-    Phase 6 (Operational maturity — depends on Phase 4)
+    Phase 6 (Operational maturity — depends on Phase 5)
 ```
 
 **Phase 1:** None
 **Phase 2:** Phase 1 complete. GHCR access (included with GitHub plan). If repo is private, a PAT with `read:packages` scope for EC2 image pulls
 **Phase 3:** Phase 2 complete (app uses `image:` not `build:`)
 **Phase 4:** Phase 2 complete. AWS account access for IAM (OIDC provider, roles, instance profile). SSM Agent installed on EC2. Secrets: `AWS_DEPLOY_ROLE_ARN`, `EC2_INSTANCE_ID`. **Note:** Phases 3 and 4 may be executed in parallel after Phase 2
-**Phase 5:** Phases 2, 3, and 4 all complete. SIGTERM handler added to server code
-**Phase 6:** Phase 4 complete (SSM + OIDC already configured, IAM roles exist). AWS account access for SSM Parameter Store, CloudWatch, S3 (Terraform state). Terraform CLI installed locally. Discord webhook URL for notifications
+**Phase 5:** Phases 2, 3, and 4 all complete. SIGTERM handler already added in Phase 1
+**Phase 6:** Phase 5 complete (CloudWatch logging and secrets target `app-blue`/`app-green` services from Phase 5's `docker-compose.yml`). AWS account access for SSM Parameter Store, CloudWatch, S3 (Terraform state). Terraform CLI installed locally. Discord webhook URL for notifications
 
 ### Testing Strategy
 
-**Phase 1:** Run `docker compose config` to validate YAML. Deploy and verify `docker stats` shows resource limits. Check `docker inspect` for security options. Verify health check `start_period` by watching container startup logs
+**Phase 1:** Run `docker compose config` to validate YAML. Deploy and verify `docker stats` shows resource limits. Check `docker inspect` for security options. Verify health check `start_period` by watching container startup logs. Verify SIGTERM handler by running `docker stop app` and confirming graceful shutdown in logs (`SIGTERM received, shutting down gracefully...`)
 **Phase 2:** Push a test tag. Verify image appears in GHCR with all three tags. Verify EC2 can `docker compose pull` the image. Test rollback by setting `IMAGE_TAG` to a previous version
 **Phase 3:** Deploy and verify: `docker network inspect backend` shows containers. Test API (`/api/health`), WebSocket (`/ws`), and voice (mediasoup RTP on UDP 40000-40099). Test that coturn TURN relay still works
 **Phase 4:** Push a test tag. Verify OIDC auth succeeds in GitHub Actions logs. Verify SSM command executes on EC2. Check CloudTrail for audit entry. Verify SSH is refused after port 22 is closed
-**Phase 5:** Deploy a known-good image. Verify traffic switches without dropped connections. Deploy a broken image (bad health check). Verify rollback leaves the old container active. Monitor WebSocket connections during deploy
-**Phase 6:** Verify secrets load from SSM (check app startup logs, not the secret values). Verify CloudWatch log group has entries. Run `terraform plan` and verify it matches existing infrastructure. Trigger a failed deploy and verify Discord notification arrives. Check uptime monitor dashboard
+**Phase 5:** Deploy a known-good image. Verify drain endpoint signals WebSocket clients to reconnect and connection count reaches zero within drain window. Deploy a broken image (bad health check). Verify rollback leaves the old container active. Verify `RUN_MIGRATIONS=false` prevents auto-migration at startup. Monitor WebSocket connections during deploy
+**Phase 6:** Verify secrets load from SSM via environment overrides (check app startup logs, not the secret values; verify no `.secrets.env` file exists on disk after deploy). Verify CloudWatch log group `/discord-clone/production/app` has entries from `app-blue` stream prefix. Run `terraform plan` and verify it matches existing infrastructure. Trigger a failed deploy and verify Discord notification arrives. Check uptime monitor dashboard
 
 ### Notes
 
@@ -936,8 +1030,48 @@ Phase 3          Phase 4
   # 6. Keep old bind mount directory for 7 days as backup, then remove
   # rm -rf ./data/sqlite
   ```
-- **Phase ordering follows the dependency graph:** 1→2→(3∥4)→5→6. Phases 3 and 4 may run in parallel after Phase 2. Phase 5 requires all of 2, 3, and 4. Do not skip phases
-- **Rollback between phases:** Each phase should be deployable and rollback-able independently. If Phase 3 (networking) breaks voice, revert `docker-compose.yml` to Phase 2 state
+- **Phase ordering follows the dependency graph:** 1→2→(3∥4)→5→6. Phases 3 and 4 may run in parallel after Phase 2. Phase 5 requires all of 2, 3, and 4. Phase 6 requires Phase 5. Do not skip phases
 - **EC2 still needs config files:** Even with registry images, the EC2 instance needs `docker-compose.yml`, `nginx.conf`, coturn config, landing page, and deploy scripts. These files are managed via git (the repo is still cloned on EC2) or could be managed via SSM documents in the future
-- **Phase 5 SQLite safety:** The deploy script is designed so that the old container is stopped before the new container receives any production traffic via nginx. During the brief window where both containers are running (health check phase), only the old container receives traffic through nginx — the new container is only accessed by the health check endpoint (`GET /api/health` which reads via `SELECT 1`). This avoids concurrent SQLite writers. **Critical:** Database migrations must NOT run automatically at container startup. Instead, add a `SKIP_MIGRATIONS=true` environment variable or run migrations as an explicit pre-switchover step in the deploy script (`docker compose exec -T "app-$NEW" npm run db:migrate`) after health check but before nginx switchover. This ensures migrations run while only one container is writing to the database
-- **Cost impact:** GHCR is free. SSM is free. CloudWatch Logs ~$5/month. Terraform state S3 <$1/month. UptimeRobot free tier. Total incremental cost: ~$5-6/month
+- **Phase 5 SQLite safety:** The deploy script is designed so that the old container is stopped before the new container receives any production traffic via nginx. During the brief window where both containers are running (health check phase), only the old container receives traffic through nginx — the new container is only accessed by the health check endpoint (`GET /api/health` which reads via `SELECT 1`). This avoids concurrent SQLite writers. Migrations are enforced by the `RUN_MIGRATIONS=false` environment variable in both app slots (Task 5.7) — the deploy script runs migrations explicitly on the new slot before nginx switchover
+- **Cost impact:** GHCR is free. SSM is free. CloudWatch Logs ~$5/month. Terraform state S3 <$1/month. S3 assets bucket <$1/month. UptimeRobot free tier. Total incremental cost: ~$6-7/month
+
+### Rollback Procedures
+
+Each phase must be tagged in git upon completion. Tag format: `deploy-phase-N` (e.g., `deploy-phase-2`). This provides concrete rollback targets.
+
+**Rollback script (`scripts/rollback-config.sh`):**
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+TARGET_REF="${1:?Usage: rollback-config.sh <git-ref>}"
+DEPLOY_DIR="/home/ubuntu/discord_clone"
+cd "$DEPLOY_DIR"
+
+echo "Rolling back config files to $TARGET_REF..."
+git fetch origin
+git checkout "$TARGET_REF" -- docker-compose.yml docker/ scripts/
+
+echo "Restarting services with rolled-back config..."
+docker compose down
+docker compose up -d
+
+echo "Verifying health..."
+for i in $(seq 1 15); do
+  if curl -sf "http://127.0.0.1:3000/api/health" > /dev/null 2>&1; then
+    echo "Health check passed"
+    exit 0
+  fi
+  sleep 2
+done
+echo "WARNING: health check failed after rollback — investigate manually"
+exit 1
+```
+
+**Per-phase rollback steps:**
+
+- **Phase 1 rollback:** `git checkout deploy-phase-0 -- docker-compose.yml && docker compose down && docker compose up -d`. Verification: `docker compose ps` shows all services running. Note: if SQLite was migrated to named volume, the bind mount must be restored manually (keep old `./data/sqlite` for 7 days as documented above)
+- **Phase 2 rollback:** `git checkout deploy-phase-1 -- docker-compose.yml .github/workflows/release.yml && docker compose down && docker compose up -d`. This restores the `build:` directive. The EC2 instance needs source code again for local builds
+- **Phase 3 rollback:** `bash scripts/rollback-config.sh deploy-phase-2`. This restores host networking, reverts nginx upstream to `127.0.0.1:3000`, and removes the bridge network. Verification: test API, WebSocket, and voice
+- **Phase 4 rollback:** Re-enable SSH key secrets in GitHub, restore `appleboy/ssh-action` steps in `release.yml`, re-open port 22 in security group. This is a manual revert — Phase 4 changes span GitHub Settings + AWS Console + workflow file
+- **Phase 5 rollback:** `bash scripts/rollback-config.sh deploy-phase-4`. This reverts to single `app` service on port 3000. Verification: `docker compose ps` shows single app instance, test API + WebSocket + voice. If Phase 5 was partially deployed (one blue-green slot running), stop both slots first: `docker compose stop app-blue app-green` before rolling back
+- **Phase 6 rollback:** Revert compose logging to `json-file`, remove SSM secret fetching from deploy script, restore `.env` from SSM backup: `aws ssm get-parameter --name "/discord-clone/prod/env-backup" --with-decryption --query "Parameter.Value" --output text > .env && chmod 600 .env`. Terraform resources (IAM, SG, etc.) can remain in AWS — they are declarative and don't affect the running application

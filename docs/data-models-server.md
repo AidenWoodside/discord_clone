@@ -1,160 +1,188 @@
-# Data Models - Server
+# Data Models — Server
 
-**Generated:** 2026-02-24 | **Scan Level:** Quick | **Part:** server
+**Generated:** 2026-02-26 | **Scan Level:** Exhaustive | **Source:** All schema and migration files read
 
 ## Overview
 
-- **Database:** SQLite (via better-sqlite3)
 - **ORM:** Drizzle ORM 0.45.1
-- **Schema Location:** `server/src/db/schema.ts`
-- **Migrations:** `server/drizzle/` (Drizzle Kit managed)
-
-## Tables
-
-### users
-
-Primary user account table.
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | TEXT | PK | UUID |
-| `username` | TEXT | UNIQUE, NOT NULL | Unique username |
-| `password_hash` | TEXT | NOT NULL | bcrypt hashed password |
-| `role` | TEXT | NOT NULL, DEFAULT 'user' | 'owner' or 'user' |
-| `public_key` | TEXT | NULLABLE | X25519 public key for E2E encryption |
-| `encrypted_group_key` | TEXT | NULLABLE | Sealed box encrypted group key |
-| `created_at` | INTEGER | NOT NULL | Unix timestamp |
-
-**Indexes:** `users_username_unique`
-
-### sessions
-
-Active authentication sessions.
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | TEXT | PK | UUID |
-| `user_id` | TEXT | FK → users.id, NOT NULL | Session owner |
-| `refresh_token_hash` | TEXT | NOT NULL | bcrypt hash of refresh token |
-| `expires_at` | INTEGER | NOT NULL | Unix timestamp expiration |
-| `created_at` | INTEGER | NOT NULL | Unix timestamp |
-
-**Indexes:** `idx_sessions_user_id`
-
-### invites
-
-Single-use registration invite tokens.
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | TEXT | PK | UUID |
-| `token` | TEXT | UNIQUE, NOT NULL | Invite token string |
-| `created_by` | TEXT | FK → users.id, NOT NULL | Owner who created invite |
-| `revoked` | INTEGER | DEFAULT false | Boolean (0/1) |
-| `created_at` | INTEGER | NOT NULL | Unix timestamp |
-
-**Indexes:** `invites_token_unique`
-
-### bans
-
-User ban records.
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | TEXT | PK | UUID |
-| `user_id` | TEXT | FK → users.id, NOT NULL | Banned user |
-| `banned_by` | TEXT | FK → users.id, NOT NULL | Admin who issued ban |
-| `created_at` | INTEGER | NOT NULL | Unix timestamp |
-
-**Indexes:** `idx_bans_user_id`
-
-### channels
-
-Communication channels (text and voice).
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | TEXT | PK | UUID |
-| `name` | TEXT | NOT NULL | Channel display name |
-| `type` | TEXT | NOT NULL | 'text' or 'voice' |
-| `created_at` | INTEGER | NOT NULL | Unix timestamp |
-
-**Indexes:** `idx_channels_type`
+- **Database:** SQLite via better-sqlite3 12.6.2
+- **Schema File:** `server/src/db/schema.ts`
+- **Connection:** `server/src/db/connection.ts` (WAL mode, foreign keys enabled)
+- **Migrations:** `server/drizzle/` (4 sequential migrations via drizzle-kit)
+- **Tables:** 6
+- **Total Columns:** 33
+- **Foreign Keys:** 6
+- **Indexes:** 7
 
 ## Entity Relationship Diagram
 
 ```
-┌──────────────┐       ┌──────────────┐
-│    users     │       │   sessions   │
-│──────────────│       │──────────────│
-│ id (PK)      │←──┐   │ id (PK)      │
-│ username     │   │   │ user_id (FK) │──→ users.id
-│ password_hash│   │   │ refresh_hash │
-│ role         │   │   │ expires_at   │
-│ public_key   │   │   │ created_at   │
-│ enc_group_key│   │   └──────────────┘
-│ created_at   │   │
-└──────────────┘   │   ┌──────────────┐
-                   │   │   invites    │
-                   │   │──────────────│
-                   │   │ id (PK)      │
-                   ├──→│ created_by   │──→ users.id
-                   │   │ token        │
-                   │   │ revoked      │
-                   │   │ created_at   │
-                   │   └──────────────┘
-                   │
-                   │   ┌──────────────┐
-                   │   │    bans      │
-                   │   │──────────────│
-                   │   │ id (PK)      │
-                   ├──→│ user_id (FK) │──→ users.id
-                   └──→│ banned_by(FK)│──→ users.id
-                       │ created_at   │
-                       └──────────────┘
-
-┌──────────────┐
-│   channels   │  (no FKs currently - standalone)
-│──────────────│
-│ id (PK)      │
-│ name         │
-│ type         │
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│    users     │     │   sessions   │     │    invites   │
+│──────────────│     │──────────────│     │──────────────│
+│ id (PK)      │◄────│ user_id (FK) │     │ id (PK)      │
+│ username     │     │ id (PK)      │     │ token        │
+│ password_hash│     │ refresh_token│     │ created_by───│──► users.id
+│ role         │     │ _hash        │     │ revoked      │
+│ public_key   │     │ expires_at   │     │ created_at   │
+│ encrypted_   │     │ created_at   │     └──────────────┘
+│ group_key    │     └──────────────┘
 │ created_at   │
-└──────────────┘
+└──────┬───────┘
+       │
+       │  ┌──────────────┐     ┌──────────────┐
+       │  │     bans     │     │   channels   │
+       │  │──────────────│     │──────────────│
+       ├──│ user_id (FK) │     │ id (PK)      │◄─┐
+       └──│ banned_by(FK)│     │ name         │  │
+          │ id (PK)      │     │ type         │  │
+          │ created_at   │     │ created_at   │  │
+          └──────────────┘     └──────────────┘  │
+                                                  │
+                               ┌──────────────┐  │
+                               │   messages   │  │
+                               │──────────────│  │
+                               │ id (PK)      │  │
+                               │ channel_id───│──┘
+                               │ user_id (FK) │──► users.id
+                               │ encrypted_   │
+                               │ content      │
+                               │ nonce        │
+                               │ created_at   │
+                               └──────────────┘
 ```
 
-## Migrations
+## Table Definitions
 
-| Migration | File | Description |
-|-----------|------|-------------|
-| 0000 | `0000_steep_galactus.sql` | Initial schema: all 5 tables, PKs, FKs, indexes, unique constraints |
-| 0001 | `0001_add_encrypted_group_key.sql` | Added `encrypted_group_key` column to users table |
+### `users`
 
-## Drizzle Configuration
+| Column | Type | Constraints | Default | Description |
+|--------|------|-------------|---------|-------------|
+| `id` | TEXT | PRIMARY KEY | `crypto.randomUUID()` | Unique user identifier |
+| `username` | TEXT | NOT NULL, UNIQUE | — | Login username (3-32 chars, alphanumeric + underscore) |
+| `password_hash` | TEXT | NOT NULL | — | bcrypt hash (cost factor 12) |
+| `role` | TEXT | NOT NULL | `'user'` | `'owner'` or `'user'` |
+| `public_key` | TEXT | nullable | — | Base64-encoded X25519 public key for E2E encryption |
+| `encrypted_group_key` | TEXT | nullable | — | Base64-encoded sealed box (group key encrypted for this user) |
+| `created_at` | INTEGER | NOT NULL | `new Date()` | Unix timestamp (milliseconds) |
 
-```typescript
-// server/drizzle.config.ts
-{
-  dialect: 'sqlite',
-  schema: './src/db/schema.ts',
-  out: './drizzle',
-  dbCredentials: {
-    url: process.env.DATABASE_PATH || './data/discord_clone.db'
-  }
-}
-```
+**Indexes:** `users_username_unique` (UNIQUE on `username`)
 
-## Database Commands
+**Notes:**
+- First registered user gets `role = 'owner'` automatically
+- `public_key` sent during registration; server uses it to encrypt group key via `crypto_box_seal`
+- `encrypted_group_key` returned on login/register for client-side decryption
 
-```bash
-npm run db:generate   # Generate migration from schema changes
-npm run db:migrate    # Run pending migrations
-npm run db:push       # Push schema directly (dev only)
-npm run db:studio     # Open Drizzle Studio GUI
-```
+### `sessions`
 
-## Planned Tables (from shared types)
+| Column | Type | Constraints | Default | Description |
+|--------|------|-------------|---------|-------------|
+| `id` | TEXT | PRIMARY KEY | `crypto.randomUUID()` | Session identifier |
+| `user_id` | TEXT | NOT NULL, FK → users.id | — | Owner of this session |
+| `refresh_token_hash` | TEXT | NOT NULL | — | SHA-256 hash of the refresh token |
+| `expires_at` | INTEGER | NOT NULL | — | Unix timestamp when refresh token expires |
+| `created_at` | INTEGER | NOT NULL | `new Date()` | Session creation time |
 
-Based on the shared library's `Message` type and WebSocket protocol, these tables are likely planned:
-- **messages** - Text messages (id, channelId, authorId, content, encrypted, nonce, timestamps)
-- Additional server/guild management tables may be added in future epics
+**Indexes:** `idx_sessions_user_id` on `user_id`
+
+**Notes:**
+- Refresh tokens are never stored in plaintext; only SHA-256 hashes are persisted
+- Token rotation: on refresh, old session deleted, new session created
+- All sessions deleted on kick/ban/password reset (force logout)
+- Expired sessions cleaned on server startup
+
+### `invites`
+
+| Column | Type | Constraints | Default | Description |
+|--------|------|-------------|---------|-------------|
+| `id` | TEXT | PRIMARY KEY | `crypto.randomUUID()` | Invite record identifier |
+| `token` | TEXT | NOT NULL, UNIQUE | — | Invite token string (used in URLs) |
+| `created_by` | TEXT | NOT NULL, FK → users.id | — | Owner who created the invite |
+| `revoked` | INTEGER | NOT NULL | `false` (0) | Whether invite has been revoked |
+| `created_at` | INTEGER | NOT NULL | `new Date()` | Creation timestamp |
+
+**Indexes:** `invites_token_unique` (UNIQUE on `token`)
+
+### `bans`
+
+| Column | Type | Constraints | Default | Description |
+|--------|------|-------------|---------|-------------|
+| `id` | TEXT | PRIMARY KEY | `crypto.randomUUID()` | Ban record identifier |
+| `user_id` | TEXT | NOT NULL, FK → users.id | — | Banned user |
+| `banned_by` | TEXT | NOT NULL, FK → users.id | — | Admin who issued the ban |
+| `created_at` | INTEGER | NOT NULL | `new Date()` | Ban timestamp |
+
+**Indexes:** `idx_bans_user_id` on `user_id`
+
+**Notes:**
+- Ban check occurs at login time (returns `ACCOUNT_BANNED` error)
+- Unbanning deletes the ban record entirely
+- Banning also deletes all user sessions (immediate force-logout)
+
+### `channels`
+
+| Column | Type | Constraints | Default | Description |
+|--------|------|-------------|---------|-------------|
+| `id` | TEXT | PRIMARY KEY | `crypto.randomUUID()` | Channel identifier |
+| `name` | TEXT | NOT NULL, UNIQUE | — | Channel display name (1-32 chars) |
+| `type` | TEXT | NOT NULL | — | `'text'` or `'voice'` |
+| `created_at` | INTEGER | NOT NULL | `new Date()` | Creation timestamp |
+
+**Indexes:** `idx_channels_type` on `type`, `channels_name_unique` (UNIQUE on `name`)
+
+**Notes:**
+- Maximum 50 channels per server (enforced in `channelService`)
+- Default seed channels: `general` (text), `Gaming` (voice)
+
+### `messages`
+
+| Column | Type | Constraints | Default | Description |
+|--------|------|-------------|---------|-------------|
+| `id` | TEXT | PRIMARY KEY | `crypto.randomUUID()` | Message identifier |
+| `channel_id` | TEXT | NOT NULL, FK → channels.id | — | Channel this message belongs to |
+| `user_id` | TEXT | NOT NULL, FK → users.id | — | Message author |
+| `encrypted_content` | TEXT | NOT NULL | — | E2E encrypted message content (base64 ciphertext) |
+| `nonce` | TEXT | NOT NULL | — | Encryption nonce (base64, 24 bytes) |
+| `created_at` | INTEGER | NOT NULL | `unixepoch()` | Message timestamp (SQLite function) |
+
+**Indexes:** `idx_messages_channel_id` on `channel_id`, `idx_messages_created_at` on `created_at`
+
+**Notes:**
+- Server never sees plaintext message content
+- Pagination via cursor: `GET /api/channels/:channelId/messages?before=<messageId>&limit=50`
+- Maximum message length: 2000 characters (validated before encryption on client)
+
+## Migration History
+
+| # | File | Changes |
+|---|------|---------|
+| 0000 | `0000_groovy_mojo.sql` | Initial schema: `users`, `sessions`, `invites`, `bans`, `channels` tables with all indexes |
+| 0001 | `0001_thin_leader.sql` | Added `encrypted_group_key` column to `users` table |
+| 0002 | `0002_rainy_namorita.sql` | Added `messages` table with foreign keys and indexes |
+| 0003 | `0003_cloudy_red_skull.sql` | Added unique index on `channels.name` |
+
+## Database Configuration
+
+- **WAL Mode:** Enabled for file-based databases (concurrent reads during writes)
+- **Foreign Keys:** Explicitly enabled via `PRAGMA foreign_keys = ON`
+- **In-Memory Support:** `:memory:` path for testing (WAL not used)
+- **Connection:** Synchronous via better-sqlite3 (no connection pool needed for SQLite)
+- **Location:** Configurable via `DATABASE_PATH` env var (default: `./data/discord_clone.db`)
+- **Docker Volume:** `./data/sqlite:/app/data` maps host directory into container
+
+## Seeding
+
+Seeds default channels if the channels table is empty:
+- `general` (type: `text`)
+- `Gaming` (type: `voice`)
+
+Also triggered during first-user registration (within a transaction).
+
+## In-Memory State (Not Persisted)
+
+| Data | Storage | Purpose |
+|------|---------|---------|
+| WebSocket connections | `Map<userId, WebSocket>` | Active connection tracking |
+| Online presence | `Set<userId>` | Who is currently online |
+| Voice peers | `Map<userId, VoicePeer>` | Active voice participants with mediasoup transports/producers/consumers |
+| mediasoup Worker/Router | Singleton objects | SFU media processing |

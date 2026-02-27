@@ -1,0 +1,140 @@
+{
+  "repository_type": "monorepo",
+  "workspace_manager": "npm",
+  "primary_language": "TypeScript 5.9.3",
+  "version": "0.3.12",
+  "parts": [
+    {
+      "part_id": "client",
+      "project_type_id": "desktop",
+      "display_name": "Electron Desktop Client",
+      "root_path": "client/",
+      "entry_points": [
+        "client/src/main/index.ts",
+        "client/src/preload/index.ts",
+        "client/src/renderer/src/main.tsx"
+      ],
+      "tech_stack": {
+        "runtime": "Electron 40.6.0",
+        "framework": "React 19.1.0",
+        "state": "Zustand 5.0.11",
+        "styling": "Tailwind CSS 4.2.0",
+        "ui_primitives": "Radix UI 1.4.3",
+        "routing": "React Router 7.13.0",
+        "voice_video": "mediasoup-client 3.18.7",
+        "encryption": "libsodium-wrappers 0.8.2",
+        "auto_update": "electron-updater 6.8.3",
+        "build": "electron-vite 3.1.0",
+        "packaging": "electron-builder 26.0.0",
+        "testing": "Vitest 4.0.0 + @testing-library/react"
+      },
+      "metrics": {
+        "source_files": 61,
+        "test_files": 44,
+        "components": 40,
+        "stores": 10,
+        "services": 7,
+        "hooks": 3,
+        "utilities": 4
+      }
+    },
+    {
+      "part_id": "server",
+      "project_type_id": "backend",
+      "display_name": "Fastify Backend API",
+      "root_path": "server/",
+      "entry_points": ["server/src/index.ts"],
+      "tech_stack": {
+        "framework": "Fastify 5.7.0",
+        "orm": "Drizzle ORM 0.45.1",
+        "database": "SQLite (better-sqlite3 12.6.2)",
+        "auth": "JWT (jsonwebtoken 9.0.3) + bcrypt 6.0.0",
+        "websocket": "@fastify/websocket 11.2.0",
+        "voice_video": "mediasoup 3.19.17",
+        "encryption": "libsodium-wrappers 0.8.2",
+        "testing": "Vitest 4.0.0"
+      },
+      "metrics": {
+        "source_files": 25,
+        "test_files": 22,
+        "privacy_tests": 4,
+        "api_endpoints": 17,
+        "ws_message_types": 27,
+        "db_tables": 6,
+        "db_columns": 33,
+        "migrations": 4
+      }
+    },
+    {
+      "part_id": "shared",
+      "project_type_id": "library",
+      "display_name": "Shared TypeScript Library",
+      "root_path": "shared/",
+      "entry_points": ["shared/src/index.ts"],
+      "tech_stack": {
+        "language": "TypeScript 5.9.3",
+        "encryption": "libsodium-wrappers 0.8.2",
+        "testing": "Vitest 4.0.0"
+      },
+      "metrics": {
+        "source_files": 4,
+        "test_files": 1,
+        "domain_types": 7,
+        "api_envelope_types": 4,
+        "ws_types": 27,
+        "ws_payload_interfaces": 25,
+        "runtime_constants": 19
+      }
+    }
+  ],
+  "integration_points": [
+    {
+      "id": "shared-imports",
+      "type": "build-time",
+      "from": ["client", "server"],
+      "to": "shared",
+      "mechanism": "npm workspace import",
+      "description": "Types, constants, and WS protocol definitions"
+    },
+    {
+      "id": "http-rest",
+      "type": "runtime",
+      "from": "client",
+      "to": "server",
+      "mechanism": "HTTP REST API",
+      "description": "17 endpoints with JWT Bearer auth, JSON request/response"
+    },
+    {
+      "id": "websocket",
+      "type": "runtime",
+      "from": "client",
+      "to": "server",
+      "mechanism": "Native WebSocket",
+      "description": "27 message types for text, presence, channels, admin, voice signaling"
+    },
+    {
+      "id": "webrtc-mediasoup",
+      "type": "runtime",
+      "from": "client",
+      "to": "server",
+      "mechanism": "WebRTC via mediasoup SFU",
+      "description": "Voice/video media transport via UDP with TURN/STUN relay"
+    },
+    {
+      "id": "electron-ipc",
+      "type": "runtime-internal",
+      "from": "client-renderer",
+      "to": "client-main",
+      "mechanism": "Electron IPC (invoke/handle, send/on)",
+      "description": "Secure storage, auto-update, deep link handling"
+    },
+    {
+      "id": "external-services",
+      "type": "runtime-external",
+      "from": "server",
+      "to": "external",
+      "mechanism": "GitHub Releases, Let's Encrypt, AWS EC2",
+      "description": "Auto-update distribution, TLS certificates, hosting"
+    }
+  ]
+}

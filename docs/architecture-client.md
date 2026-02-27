@@ -1,145 +1,256 @@
-# Architecture - Client (Electron Desktop App)
+# Architecture — Client (Electron Desktop App)
 
-**Generated:** 2026-02-24 | **Scan Level:** Quick | **Part:** client | **Type:** Desktop
+**Generated:** 2026-02-26 | **Scan Level:** Exhaustive | **Part:** client | **Type:** Desktop
 
 ## Executive Summary
 
-The client is a cross-platform Electron desktop application using React 19 as the renderer framework. It follows Electron's security best practices with context isolation, sandboxing, and the preload bridge pattern. The UI is built with a feature-based module architecture, Zustand for state management, and Radix UI primitives styled with Tailwind CSS 4.
+The client is an Electron 40 desktop application with a React 19 renderer. It follows Electron's multi-process architecture with strict security isolation (context isolation, sandboxing, no Node integration in renderer). The UI is built with functional React components organized by feature, Zustand for state management (10 stores), and Tailwind CSS 4 for styling. Real-time communication uses WebSocket for text/presence and mediasoup-client for voice/video via WebRTC. All messages are E2E encrypted using libsodium (XSalsa20-Poly1305) with X25519 key exchange.
 
-## Technology Stack
-
-| Category | Technology | Version |
-|----------|-----------|---------|
-| Runtime | Electron | 40.6.0 |
-| UI Framework | React | 19.1.0 |
-| Language | TypeScript | ~5.9.3 |
-| Styling | Tailwind CSS | 4.2.0 |
-| UI Primitives | Radix UI | 1.4.3 |
-| Icons | Lucide React | 0.575.0 |
-| State Management | Zustand | 5.0.11 |
-| Routing | React Router | 7.13.0 |
-| Encryption | libsodium-wrappers | 0.8.2 |
-| Build Tool | electron-vite | 3.1.0 |
-| Testing | Vitest 4 + React Testing Library 16 |
-| Packaging | electron-builder | 26.0.0 |
-
-## Architecture Pattern
-
-**Electron Multi-Process + React Feature-Based Architecture**
+## Process Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│              Electron Main              │
-│  (index.ts + safeStorage.ts)            │
-│  - App lifecycle management             │
-│  - Window creation (1280x720)           │
-│  - Secure credential storage (IPC)      │
-└─────────────┬───────────────────────────┘
-              │ IPC (context isolated)
-┌─────────────┴───────────────────────────┐
-│            Preload Bridge               │
-│  (index.ts + index.d.ts)                │
-│  - Exposes secureStorage API            │
-│  - window.api.secureStorage.{set,get,   │
-│    delete}                              │
-└─────────────┬───────────────────────────┘
-              │ contextBridge
-┌─────────────┴───────────────────────────┐
-│          React Renderer                 │
-│                                         │
-│  ┌─────────┐  ┌──────────────────────┐  │
-│  │ Stores  │  │ Services             │  │
-│  │ (Zustand)│  │ - apiClient.ts      │  │
-│  │ - auth  │  │ - encryptionService  │  │
-│  │ - channel│  └──────────┬──────────┘  │
-│  │ - member │             │             │
-│  │ - ui    │             │ HTTP/REST   │
-│  └────┬────┘             │             │
-│       │                  ▼             │
-│  ┌────┴────────────────────────────┐   │
-│  │        Features                  │   │
-│  │  auth/ layout/ channels/ members/│   │
-│  └─────────────────────────────────┘   │
-│  ┌─────────────────────────────────┐   │
-│  │      Components (Radix UI)      │   │
-│  │  Button Input Modal Tooltip ... │   │
-│  └─────────────────────────────────┘   │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                     Electron Application                      │
+│                                                               │
+│  ┌──────────────────┐    IPC (invoke/handle)                 │
+│  │   Main Process    │◄──────────────────────┐               │
+│  │  (Node.js)        │                        │               │
+│  │                   │    IPC (send/on)       │               │
+│  │  • Window mgmt    │───────────────────────►│               │
+│  │  • safeStorage    │                   ┌────┴────┐         │
+│  │  • Auto-updater   │                   │ Preload  │         │
+│  │  • Protocol handler│                  │ (Bridge) │         │
+│  │  • CSP enforcement │                  │          │         │
+│  │  • Single-instance │                  │ context  │         │
+│  └──────────────────┘                   │ Bridge   │         │
+│                                          └────┬────┘         │
+│                                               │               │
+│  ┌────────────────────────────────────────────┴─────────┐    │
+│  │              Renderer Process (Chromium)                │   │
+│  │                                                         │   │
+│  │   React 19 SPA (HashRouter)                            │   │
+│  │   ┌─────────┐  ┌──────────┐  ┌──────────┐            │   │
+│  │   │ Features │  │  Stores  │  │ Services │            │   │
+│  │   │ (40 UI   │◄►│(10 Zustand│◄►│(7 modules│            │   │
+│  │   │ comps)   │  │  stores) │  │ API/WS/  │            │   │
+│  │   └─────────┘  └──────────┘  │ crypto/  │            │   │
+│  │                               │ media)   │            │   │
+│  │                               └────┬─────┘            │   │
+│  └────────────────────────────────────┼──────────────────┘   │
+│                                        │                      │
+└────────────────────────────────────────┼──────────────────────┘
+                                         │
+                    ┌────────────────────┼────────────────────┐
+                    │ HTTP REST          │ WebSocket    WebRTC │
+                    │ (apiClient)        │ (wsClient)  (media) │
+                    ▼                    ▼              ▼      │
+              Server :3000         Server /ws     mediasoup SFU
 ```
 
-## Process Model
+## Main Process (`src/main/`)
 
-### Main Process (`src/main/`)
-- **index.ts**: App initialization, BrowserWindow creation (1280x720, min 960x540), context isolation enabled, sandbox enabled
-- **safeStorage.ts**: IPC handlers for encrypted credential storage using Electron's safeStorage API. Credentials stored as encrypted JSON at `userData/secure-tokens.json`
+### `index.ts` — Application Entry Point
 
-### Preload Bridge (`src/preload/`)
-- **index.ts**: Exposes `window.api.secureStorage` API (set, get, delete) via contextBridge
-- **index.d.ts**: TypeScript type declarations for `Window.electron` and `Window.api`
+**Responsibilities:**
+- Creates `BrowserWindow` (1280x720 default, 960x540 minimum)
+- Enforces Content Security Policy with dynamic connect-src (dev vs production URLs)
+- Registers `discord-clone://` custom protocol handler for invite deep links
+- Implements single-instance lock (prevents duplicate app instances)
+- Handles cross-platform deep linking: `open-url` (macOS), `second-instance` (Windows/Linux)
+- Initializes auto-updater in production mode
 
-### Renderer Process (`src/renderer/`)
-Feature-based organization with clear separation of concerns:
+**Security settings:**
+```
+nodeIntegration: false
+contextIsolation: true
+sandbox: true
+webSecurity: true
+```
 
-## State Management (Zustand Stores)
+### `safeStorage.ts` — Secure Token Storage
 
-| Store | State | Key Methods |
-|-------|-------|-------------|
-| `useAuthStore` | user, tokens, groupKey, loading, error | login, register, logout, refreshTokens, restoreSession |
-| `useChannelStore` | channels[], activeChannelId | fetchChannels, setActiveChannel |
-| `useMemberStore` | members[] | fetchMembers |
-| `useUIStore` | isMemberListVisible | toggleMemberList, setMemberListVisible |
+Uses Electron's `safeStorage` API for OS-level encryption:
+- macOS: Keychain
+- Windows: DPAPI
+- Linux: libsecret
 
-## Routing
+Stores encrypted JSON at `userData/secure-tokens.json`. Provides `set`, `get`, `delete` operations via IPC.
 
-Hash-based routing via React Router 7:
+**Stored keys:** `accessToken`, `refreshToken`, `privateKey`, `publicKey`, `encryptedGroupKey`
+
+### `updater.ts` — Auto-Update Lifecycle
+
+Uses `electron-updater` with GitHub Releases as the update source:
+1. Checks for updates 5 seconds after startup (production only)
+2. Forwards all update events to renderer via IPC
+3. Exposes `check`, `download`, `quitAndInstall` IPC handlers
+
+## Preload (`src/preload/`)
+
+Context bridge between main and renderer. Exposes three API surfaces via `contextBridge.exposeInMainWorld`:
+
+| API | Methods |
+|-----|---------|
+| `window.electron` | Standard Electron API (`@electron-toolkit/preload`) |
+| `window.api.secureStorage` | `set(key, value)`, `get(key)`, `delete(key)` |
+| `window.api.onDeepLink(cb)` | Listener for `discord-clone://` protocol URLs |
+| `window.api.updater` | `checkForUpdates()`, `downloadUpdate()`, `quitAndInstall()` + 5 event listeners |
+
+## Renderer Architecture (`src/renderer/`)
+
+### Component Hierarchy
+
+```
+<React.StrictMode>
+  <HashRouter>
+    <App>
+      ├── /login → <LoginPage />
+      ├── /setup → <SetupPage />
+      ├── /register/:token → <RegisterPage />
+      └── /app → <AuthGuard>
+            └── <AppLayout>
+                  ├── <ChannelSidebar>
+                  │     ├── <ServerHeader> (dropdown: invite, create channel, settings)
+                  │     ├── Text Channels
+                  │     │     └── <ChannelItem> (with <ChannelContextMenu>)
+                  │     ├── Voice Channels
+                  │     │     ├── <ChannelItem>
+                  │     │     └── <VoiceParticipant> (per connected user)
+                  │     ├── <VoiceStatusBar> (when in voice)
+                  │     └── <UserPanel> (username, avatar, mute/deafen, settings)
+                  │
+                  ├── <ContentArea>
+                  │     ├── Channel header (name, member list toggle)
+                  │     ├── <VideoGrid> (when video active)
+                  │     │     └── <VideoTile> (per participant)
+                  │     ├── Message feed (<ScrollArea>)
+                  │     │     └── <MessageGroup> (grouped by author + 5-min window)
+                  │     └── <MessageInput> (auto-grow, Enter to send, E2E encrypt)
+                  │
+                  ├── <MemberList> (toggleable right panel)
+                  │     ├── Online section
+                  │     │     └── <MemberItem> (with <MemberContextMenu> for admin)
+                  │     └── Offline section
+                  │           └── <MemberItem>
+                  │
+                  ├── <ConnectionBanner> (reconnecting/disconnected)
+                  ├── <UpdateNotification> (auto-update UI)
+                  ├── <KickedNotification> / <BannedNotification>
+                  ├── <CreateChannelModal>
+                  ├── <InviteModal>
+                  ├── <KickConfirmDialog> / <BanConfirmDialog>
+                  ├── <ResetPasswordDialog>
+                  ├── <BannedUsersPanel>
+                  └── <SettingsPage> → <AudioSettings>
+```
+
+### Service Layer
+
+Services contain all business logic and external communication. Components never call APIs directly.
+
+```
+Components ──► Stores ──► Services ──► External
+    │              │           │
+    │ useStore()   │ getState()│
+    │ selectors    │           │
+    ▼              ▼           ▼
+UI renders    State updates   apiClient (REST)
+                              wsClient (WebSocket)
+                              encryptionService (libsodium)
+                              mediaService (mediasoup)
+                              voiceService (orchestration)
+                              messageService (encrypt + send/fetch)
+                              vadService (voice activity)
+```
+
+**Key pattern:** Stores are accessed both as React hooks (selectors) and imperatively via `getState()` from services. This allows services to read/write state without being React components.
+
+### State Management (Zustand)
+
+10 independent stores, no cross-store dependencies at the store level (services coordinate between stores):
+
+| Store | Persistence | External Triggers |
+|-------|------------|-------------------|
+| `useAuthStore` | safeStorage (Electron) | Login/register API responses |
+| `useChannelStore` | None | REST API + WS `channel:created/deleted` |
+| `useMessageStore` | None | REST API + WS `text:receive` |
+| `useMemberStore` | None | REST API + WS `member:added/removed` |
+| `usePresenceStore` | None | WS `presence:sync/update` |
+| `useVoiceStore` | localStorage (device prefs) | WS `voice:*` events |
+| `useUIStore` | None | User interaction only |
+| `useInviteStore` | None | REST API |
+| `useUpdateStore` | None | Electron IPC updater events |
+| `useAdminNotificationStore` | None | WS `user:kicked/banned` |
+
+### Routing
+
+React Router v7 with `HashRouter` (hash-based URLs for Electron `file://` compatibility):
 
 | Route | Component | Auth Required |
-|-------|-----------|---------------|
+|-------|-----------|--------------|
 | `/login` | LoginPage | No |
+| `/setup` | SetupPage | No |
 | `/register/:token` | RegisterPage | No |
-| `/app/channels/:channelId` | AppLayout | Yes (AuthGuard) |
+| `/app` | AuthGuard → AppLayout | Yes |
+| `/app/channels` | ChannelRedirect | Yes |
+| `/app/channels/:channelId` | ContentArea | Yes |
 
-## Services Layer
+### E2E Encryption Architecture
 
-### apiClient.ts
-- Centralized HTTP client for server communication
-- Base URL: `import.meta.env.VITE_API_URL` (default: `http://localhost:3000`)
-- Automatic token refresh on 401 responses
-- Configurable token callbacks (set by auth store)
-- Generic typed `apiRequest<T>()` function
+```
+Registration:
+  Client generates X25519 keypair (encryptionService)
+  → Sends publicKey to server
+  → Server seals groupKey with publicKey (crypto_box_seal)
+  → Returns encryptedGroupKey
+  → Client decrypts with privateKey (crypto_box_seal_open)
+  → Stores: privateKey + publicKey in safeStorage, groupKey in memory
 
-### encryptionService.ts
-- End-to-end encryption using libsodium (NaCl)
-- Key pair generation (X25519)
-- Group key decryption (sealed box)
-- Message encryption/decryption (XSalsa20-Poly1305)
-- Base64 key serialization/deserialization
+Message Send:
+  plaintext → crypto_secretbox_easy(plaintext, randomNonce, groupKey) → ciphertext + nonce
+  → Send via WebSocket { content: ciphertext, nonce }
 
-## Component Library
+Message Receive:
+  { content: ciphertext, nonce } → crypto_secretbox_open_easy(ciphertext, nonce, groupKey)
+  → plaintext (or "[Decryption failed]")
+```
 
-7 shared Radix UI-based components with Tailwind CSS styling:
-Button, Input, Modal, ContextMenu, DropdownMenu, Tooltip, ScrollArea
+### Voice/Video Architecture
+
+```
+voiceService (orchestration)
+  ├── mediaService (mediasoup-client)
+  │     ├── Device (loaded with router capabilities)
+  │     ├── Send Transport → Audio Producer + Video Producer
+  │     ├── Recv Transport → Audio Consumers + Video Consumers
+  │     └── Device switching (replaceTrack for audio, setSinkId for output)
+  │
+  ├── vadService (voice activity detection)
+  │     ├── Local VAD (microphone → AudioContext → AnalyserNode → FFT)
+  │     └── Remote VAD (per-peer consumer track → same pipeline)
+  │     └── Config: RMS threshold 15, hold 250ms, poll 50ms
+  │
+  └── soundPlayer (connect/disconnect/mute/unmute tones)
+```
 
 ## Security Model
 
-- **Context Isolation**: Enabled (renderer cannot access Node.js APIs)
-- **Sandbox**: Enabled
-- **Credential Storage**: Electron safeStorage API (OS keychain encryption)
-- **E2E Encryption**: Messages encrypted before leaving the renderer process
-- **Token Management**: Access tokens in memory, refresh tokens in secure storage
+| Layer | Protection |
+|-------|-----------|
+| Electron | `contextIsolation`, `sandbox`, no `nodeIntegration`, CSP |
+| Storage | OS-level encryption via `safeStorage` (Keychain/DPAPI/libsecret) |
+| Transport | HTTPS + WSS in production (nginx TLS termination) |
+| Messages | E2E encrypted (XSalsa20-Poly1305, server never sees plaintext) |
+| Voice/Video | DTLS + SRTP via mediasoup WebRTC transports |
+| Auth | JWT with 15-min expiry, refresh token rotation, SHA-256 hashed storage |
+| Privacy | Zero telemetry, no external API calls, no analytics |
 
 ## Build & Packaging
 
-- **Build Tool**: electron-vite (separate configs for main, preload, renderer)
-- **Packaging**: electron-builder with targets:
-  - macOS: DMG (x64 + arm64)
-  - Windows: NSIS (x64)
-  - Linux: AppImage (x64)
-- **App ID**: `com.discord-clone.app`
+| Target | Format | Tool |
+|--------|--------|------|
+| macOS | DMG | electron-builder |
+| Windows | NSIS installer | electron-builder |
+| Linux | AppImage | electron-builder |
 
-## Testing Strategy
-
-- **Framework**: Vitest 4 with jsdom environment
-- **UI Testing**: React Testing Library + @testing-library/user-event
-- **Coverage**: Tests co-located with source files (`.test.ts` / `.test.tsx`)
-- **Test areas**: Stores, services (encryption), features (layout, channels, members), App routing
+Custom protocol `discord-clone://` registered for invite deep links. Auto-update via GitHub Releases (`electron-updater`).

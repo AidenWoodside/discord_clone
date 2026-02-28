@@ -56,8 +56,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   speakingUsers: new Set<string>(),
   isVideoEnabled: false,
   videoParticipants: new Set(),
-  selectedAudioInputId: localStorage.getItem('voiceInputDeviceId') ?? null,
-  selectedAudioOutputId: localStorage.getItem('voiceOutputDeviceId') ?? null,
+  selectedAudioInputId: typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function'
+    ? localStorage.getItem('voiceInputDeviceId') : null,
+  selectedAudioOutputId: typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function'
+    ? localStorage.getItem('voiceOutputDeviceId') : null,
   remoteMuteState: new Map(),
 
   joinChannel: async (channelId: string, userId: string) => {

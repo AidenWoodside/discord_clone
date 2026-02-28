@@ -362,8 +362,11 @@ jobs:
           done
 
       - name: Notify on failure
-        if: failure() && secrets.DEPLOY_WEBHOOK_URL != ''
+        if: failure()
+        env:
+          WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
         run: |
+          [ -z "$WEBHOOK_URL" ] && exit 0
           curl -H "Content-Type: application/json" \
             -d '{"content": "**Deploy FAILED:** `${{ github.ref_name }}` — [View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"}' \
-            "${{ secrets.DEPLOY_WEBHOOK_URL }}"
+            "$WEBHOOK_URL"

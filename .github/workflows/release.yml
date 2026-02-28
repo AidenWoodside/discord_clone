@@ -104,8 +104,8 @@ jobs:
             ghcr.io/aidenwoodside/discord-clone-server:${{ github.sha }}
             ghcr.io/aidenwoodside/discord-clone-server:${{ github.ref_name }}
             ghcr.io/aidenwoodside/discord-clone-server:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=ghcr.io/aidenwoodside/discord-clone-server:buildcache
+          cache-to: type=registry,ref=ghcr.io/aidenwoodside/discord-clone-server:buildcache,mode=max
 
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@0.28.0

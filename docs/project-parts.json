@@ -47,7 +47,7 @@
       "tech_stack": {
         "framework": "Fastify 5.7.0",
         "orm": "Drizzle ORM 0.45.1",
-        "database": "SQLite (better-sqlite3 12.6.2)",
+        "database": "PostgreSQL (postgres.js 3.x, Supabase managed)",
         "auth": "JWT (jsonwebtoken 9.0.3) + bcrypt 6.0.0",
         "websocket": "@fastify/websocket 11.2.0",
         "voice_video": "mediasoup 3.19.17",

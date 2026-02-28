@@ -28,36 +28,44 @@ export async function createChannel(db: AppDatabase, name: string, type: 'text' 
     throw new ChannelValidationError('Channel name must be between 1 and 50 characters');
   }
 
-  const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(channels);
-  if (countResult && Number(countResult.count) >= MAX_CHANNELS_PER_SERVER) {
-    throw new ChannelValidationError(`Channel limit reached (max ${MAX_CHANNELS_PER_SERVER})`);
+  try {
+    // Transaction serializes count-check + insert to prevent concurrent limit bypass
+    const channel = await db.transaction(async (tx) => {
+      const [countResult] = await tx.select({ count: sql<number>`count(*)` }).from(channels);
+      if (countResult && Number(countResult.count) >= MAX_CHANNELS_PER_SERVER) {
+        throw new ChannelValidationError(`Channel limit reached (max ${MAX_CHANNELS_PER_SERVER})`);
+      }
+
+      const [ch] = await tx.insert(channels).values({
+        name: trimmed,
+        type,
+      }).returning({
+        id: channels.id,
+        name: channels.name,
+        type: channels.type,
+        createdAt: channels.created_at,
+      });
+      return ch;
+    });
+    return channel;
+  } catch (err) {
+    // Postgres unique constraint violation — concurrent insert with same name
+    // Drizzle wraps PG errors: check both err.code and err.cause.code
+    const pgCode = (err as { code?: string }).code ??
+                   (err as { cause?: { code?: string } }).cause?.code;
+    if (pgCode === '23505') {
+      throw new ChannelValidationError('A channel with this name already exists');
+    }
+    throw err;
   }
-
-  const [existing] = await db.select({ id: channels.id }).from(channels).where(eq(channels.name, trimmed));
-  if (existing) {
-    throw new ChannelValidationError('A channel with this name already exists');
-  }
-
-  const [channel] = await db.insert(channels).values({
-    name: trimmed,
-    type,
-  }).returning({
-    id: channels.id,
-    name: channels.name,
-    type: channels.type,
-    createdAt: channels.created_at,
-  });
-
-  return channel;
 }
 
 export async function deleteChannel(db: AppDatabase, channelId: string) {
-  const [channel] = await db.select({ id: channels.id }).from(channels).where(eq(channels.id, channelId));
-  if (!channel) {
-    throw new ChannelNotFoundError('Channel not found');
-  }
-
   await db.transaction(async (tx) => {
+    const [channel] = await tx.select({ id: channels.id }).from(channels).where(eq(channels.id, channelId));
+    if (!channel) {
+      throw new ChannelNotFoundError('Channel not found');
+    }
     await tx.delete(messages).where(eq(messages.channel_id, channelId));
     await tx.delete(channels).where(eq(channels.id, channelId));
   });

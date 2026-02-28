@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import type { AppDatabase } from '../../db/connection.js';
-import { users, bans, type User, type Ban } from '../../db/schema.js';
+import { users, bans, sessions, type User, type Ban } from '../../db/schema.js';
 import { deleteUserSessions } from '../auth/sessionService.js';
 import { hashPassword } from '../auth/authService.js';
 import { removeUser as removePresence } from '../presence/presenceService.js';
@@ -54,11 +54,17 @@ export async function banUser(db: AppDatabase, userId: string, bannedBy: string)
   if (existingBan) {
     throw new UserAlreadyBannedError();
   }
-  const [ban] = await db.insert(bans).values({
-    user_id: userId,
-    banned_by: bannedBy,
-  }).returning();
-  await deleteUserSessions(db, userId);
+
+  // Atomic: ban insert + session revocation in one transaction
+  const ban = await db.transaction(async (tx) => {
+    const [newBan] = await tx.insert(bans).values({
+      user_id: userId,
+      banned_by: bannedBy,
+    }).returning();
+    await tx.delete(sessions).where(eq(sessions.user_id, userId));
+    return newBan;
+  });
+
   removePresence(userId);
   return ban;
 }
@@ -78,8 +84,13 @@ export async function resetPassword(db: AppDatabase, userId: string): Promise<st
   }
   const temporaryPassword = crypto.randomBytes(16).toString('base64url');
   const newHash = await hashPassword(temporaryPassword);
-  await db.update(users).set({ password_hash: newHash }).where(eq(users.id, userId));
-  await deleteUserSessions(db, userId);
+
+  // Atomic: password update + session revocation in one transaction
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ password_hash: newHash }).where(eq(users.id, userId));
+    await tx.delete(sessions).where(eq(sessions.user_id, userId));
+  });
+
   return temporaryPassword;
 }
 

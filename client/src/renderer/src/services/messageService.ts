@@ -2,7 +2,7 @@ import { encryptMessage, decryptMessage } from './encryptionService';
 import { wsClient } from './wsClient';
 import { apiGet } from './apiClient';
 import { WS_TYPES, MAX_MESSAGE_LENGTH } from 'discord-clone-shared';
-import type { TextSendPayload, TextReceivePayload } from 'discord-clone-shared';
+import type { TextSendPayload, TextReceivePayload, ApiPaginatedList } from 'discord-clone-shared';
 import useAuthStore from '../stores/useAuthStore';
 import useMessageStore from '../stores/useMessageStore';
 import type { DecryptedMessage } from '../stores/useMessageStore';
@@ -46,6 +46,7 @@ export function sendMessage(channelId: string, plaintext: string): void {
         channelId,
         content: ciphertext,
         nonce,
+        tempId,
       } satisfies TextSendPayload,
       id: tempId,
     });
@@ -65,19 +66,27 @@ async function fetchAndDecryptMessages(
     url += `&cursor=${encodeURIComponent(options.cursor)}`;
   }
 
-  const result = await apiGet<{ data: TextReceivePayload[]; cursor: string | null; count: number }>(url, true);
+  const result = await apiGet<ApiPaginatedList<TextReceivePayload>>(url, true);
 
   const groupKey = useAuthStore.getState().groupKey;
   if (!groupKey) return null;
 
-  const decrypted: DecryptedMessage[] = result.data.map((msg) => ({
-    id: msg.messageId,
-    channelId: msg.channelId,
-    authorId: msg.authorId,
-    content: decryptMessage(msg.content, msg.nonce, groupKey),
-    createdAt: msg.createdAt,
-    status: 'sent' as const,
-  }));
+  const decrypted: DecryptedMessage[] = result.data.map((msg) => {
+    let content: string;
+    try {
+      content = decryptMessage(msg.content, msg.nonce, groupKey);
+    } catch {
+      content = '[Decryption failed]';
+    }
+    return {
+      id: msg.messageId,
+      channelId: msg.channelId,
+      authorId: msg.authorId,
+      content,
+      createdAt: msg.createdAt,
+      status: 'sent' as const,
+    };
+  });
 
   // API returns newest first — reverse for chronological display
   decrypted.reverse();
@@ -123,7 +132,10 @@ export async function fetchOlderMessages(channelId: string): Promise<void> {
 
     useMessageStore.getState().prependMessages(channelId, data.messages, data.hasMore, data.cursor);
     useMessageStore.getState().setLoadingMore(false);
-  } catch {
+  } catch (err) {
     useMessageStore.getState().setLoadingMore(false);
+    useMessageStore.getState().setError(
+      err instanceof Error ? err.message : 'Failed to load older messages',
+    );
   }
 }

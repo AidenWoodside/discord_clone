@@ -75,7 +75,9 @@ ALTER TABLE messages ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE invites ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE bans ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 
--- Force RLS even for table owners (defense-in-depth)
+-- FORCE RLS — no-op for the postgres role (which has BYPASSRLS),
+-- but enforces RLS if a non-superuser role ever connects directly.
+-- The primary protection is ENABLE RLS + zero policies + REVOKE below.
 ALTER TABLE users FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE sessions FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE channels FORCE ROW LEVEL SECURITY;--> statement-breakpoint

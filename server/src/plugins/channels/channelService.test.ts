@@ -7,6 +7,7 @@ vi.hoisted(() => {
   process.env.GROUP_ENCRYPTION_KEY = 'rSxlHxEjeJC7RY079zu0Kg9fHWEIdAtGE4s76zAI9Rw';
 });
 
+import { MAX_CHANNELS_PER_SERVER } from 'discord-clone-shared';
 import { setupApp, teardownApp, truncateAll, seedOwner } from '../../test/helpers.js';
 import { channels, messages } from '../../db/schema.js';
 import { createChannel, deleteChannel, ChannelValidationError, ChannelNotFoundError } from './channelService.js';
@@ -65,7 +66,7 @@ describe('channelService', () => {
 
     it('throws ChannelValidationError when channel limit is reached', async () => {
       // Seed channels up to the limit
-      for (let i = 0; i < 50; i++) {
+      for (let i = 0; i < MAX_CHANNELS_PER_SERVER; i++) {
         await app.db.insert(channels).values({ name: `channel-${i}`, type: 'text' });
       }
 

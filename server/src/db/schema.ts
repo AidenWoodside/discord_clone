@@ -66,8 +66,7 @@ export const messages = pgTable('messages', {
   nonce: text('nonce').notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  index('idx_messages_channel_id').on(table.channel_id),
-  index('idx_messages_created_at').on(table.created_at),
+  // Composite index covers channel_id prefix queries — no standalone indexes needed
   index('messages_channel_created_idx').on(table.channel_id, table.created_at, table.id),
 ]);
 

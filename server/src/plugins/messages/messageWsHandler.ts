@@ -4,26 +4,18 @@ import { WS_TYPES, MAX_MESSAGE_LENGTH } from 'discord-clone-shared';
 import type { WsMessage, TextSendPayload, TextReceivePayload, TextErrorPayload } from 'discord-clone-shared';
 import { registerHandler } from '../../ws/wsRouter.js';
 import { createMessage } from './messageService.js';
+import { withDbRetry } from '../../db/withDbRetry.js';
 import type { AppDatabase } from '../../db/connection.js';
 
-async function withDbRetry<T>(
-  fn: () => Promise<T>,
-  { maxRetries = 1, delayMs = 200 } = {},
-): Promise<T> {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (err: unknown) {
-      const pgErr = err as { code?: string };
-      // Only retry on transient connection errors, not constraint violations
-      const isTransient = pgErr.code === '08006' || // connection_failure
-                          pgErr.code === '08001' || // sqlclient_unable_to_establish
-                          pgErr.code === '57P01';    // admin_shutdown (Supabase maintenance)
-      if (!isTransient || attempt === maxRetries) throw err;
-      await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
-    }
+function sendTextError(ws: WebSocket, error: string, tempId: string): void {
+  try {
+    ws.send(JSON.stringify({
+      type: WS_TYPES.TEXT_ERROR,
+      payload: { error, tempId } satisfies TextErrorPayload,
+    }));
+  } catch {
+    // WS send failed — connection is dead, nothing to do
   }
-  throw new Error('unreachable');
 }
 
 export function registerMessageHandlers(
@@ -34,21 +26,21 @@ export function registerMessageHandlers(
   registerHandler(WS_TYPES.TEXT_SEND, async (ws, message, userId) => {
     const payload = message.payload as TextSendPayload;
 
-    // Validate required fields
+    // Validate required fields — send TEXT_ERROR instead of closing connection
     if (!payload.channelId || typeof payload.channelId !== 'string') {
-      ws.close(4002, 'Missing or invalid channelId');
+      sendTextError(ws, 'MISSING_CHANNEL_ID', payload.tempId ?? '');
       return;
     }
     if (!payload.content || typeof payload.content !== 'string') {
-      ws.close(4002, 'Missing or invalid content');
+      sendTextError(ws, 'MISSING_CONTENT', payload.tempId ?? '');
       return;
     }
     if (!payload.nonce || typeof payload.nonce !== 'string') {
-      ws.close(4002, 'Missing or invalid nonce');
+      sendTextError(ws, 'MISSING_NONCE', payload.tempId ?? '');
       return;
     }
     if (payload.content.length > MAX_MESSAGE_LENGTH) {
-      ws.close(4002, 'Message content exceeds maximum length');
+      sendTextError(ws, 'MESSAGE_TOO_LONG', payload.tempId ?? '');
       return;
     }
 
@@ -63,14 +55,7 @@ export function registerMessageHandlers(
       }));
     } catch (err) {
       log.error({ error: (err as Error).message, channelId: payload.channelId }, 'Failed to store message');
-      try {
-        ws.send(JSON.stringify({
-          type: WS_TYPES.TEXT_ERROR,
-          payload: { error: 'MESSAGE_STORE_FAILED', tempId: message.id ?? '' } satisfies TextErrorPayload,
-        }));
-      } catch {
-        // WS send failed — connection is dead, nothing to do
-      }
+      sendTextError(ws, 'MESSAGE_STORE_FAILED', payload.tempId ?? '');
       return;
     }
 

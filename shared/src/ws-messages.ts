@@ -9,6 +9,7 @@ export interface TextSendPayload {
   channelId: string;
   content: string;
   nonce: string;
+  tempId: string;
 }
 
 export interface TextReceivePayload {

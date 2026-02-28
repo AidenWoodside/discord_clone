@@ -70,7 +70,7 @@ async function handleVoiceJoin(ws: WebSocket, message: WsMessage, userId: string
     channel = await getChannelById(db, channelId);
   } catch (err) {
     log.error({ err, channelId }, 'Failed to look up voice channel');
-    ws.close(4003, 'Internal error');
+    ws.close(4500, 'Internal error');
     return;
   }
   if (!channel) {

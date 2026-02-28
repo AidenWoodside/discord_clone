@@ -28,11 +28,11 @@
     "project_classification": {
       "repository_type": "monorepo",
       "parts_count": 3,
-      "primary_tech": "Electron 40 + React 19, Fastify 5 + SQLite, TypeScript shared lib"
+      "primary_tech": "Electron 40 + React 19, Fastify 5 + PostgreSQL (Supabase), TypeScript shared lib"
     },
     "technology_stack": {
       "client": "Electron 40 + React 19 + Zustand 5 + Tailwind CSS 4 + Radix UI + mediasoup-client + libsodium + electron-updater",
-      "server": "Fastify 5 + Drizzle ORM + SQLite + JWT + bcrypt + mediasoup + @fastify/websocket + libsodium",
+      "server": "Fastify 5 + Drizzle ORM + PostgreSQL (Supabase) + JWT + bcrypt + mediasoup + @fastify/websocket + libsodium",
       "shared": "TypeScript 5.9.3 + libsodium-wrappers (27 WS types, 19 constants, 7 domain types)"
     },
     "conditional_analysis": {

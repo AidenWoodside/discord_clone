@@ -1,7 +1,7 @@
 import fp from 'fastify-plugin';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { users, invites, bans, channels } from '../../db/schema.js';
+import { users, invites, bans, channels, sessions } from '../../db/schema.js';
 import { count } from 'drizzle-orm';
 import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken, hashToken, verifyRefreshToken } from './authService.js';
 import { validateInvite } from '../invites/inviteService.js';
@@ -39,8 +39,12 @@ export default fp(async (fastify: FastifyInstance) => {
       if (deleted > 0) {
         fastify.log.info(`Cleaned ${deleted} expired session(s)`);
       }
-    } catch {
-      // Sessions table may not exist yet (pre-migration)
+    } catch (err: unknown) {
+      // 42P01 = relation does not exist — expected pre-migration
+      const pgCode = (err as { code?: string }).code;
+      if (pgCode !== '42P01') {
+        fastify.log.error(err, 'Failed to clean expired sessions on startup');
+      }
     }
   });
 
@@ -197,7 +201,10 @@ export default fp(async (fastify: FastifyInstance) => {
         return { error: null, user: newUser } as const;
       } catch (err: unknown) {
         // Postgres error code 23505 = unique_violation
-        if (err instanceof Error && (err as { code?: string }).code === '23505') {
+        // Drizzle wraps PG errors: check both err.code and err.cause.code
+        const pgCode = (err as { code?: string }).code ??
+                       (err as { cause?: { code?: string } }).cause?.code;
+        if (pgCode === '23505') {
           return { error: 'USERNAME_TAKEN' } as const;
         }
         throw err;
@@ -291,7 +298,15 @@ export default fp(async (fastify: FastifyInstance) => {
       });
     }
 
-    // 2. Check bans (before expensive bcrypt — timing attack prevention)
+    // 2. Verify password first — prevents username enumeration via ban status
+    const validPassword = await verifyPassword(password, user.password_hash);
+    if (!validPassword) {
+      return reply.status(401).send({
+        error: { code: 'INVALID_CREDENTIALS', message: 'Invalid username or password.' },
+      });
+    }
+
+    // 3. Check bans (after bcrypt to avoid leaking username existence)
     const [ban] = await fastify.db
       .select()
       .from(bans)
@@ -300,14 +315,6 @@ export default fp(async (fastify: FastifyInstance) => {
     if (ban) {
       return reply.status(403).send({
         error: { code: 'ACCOUNT_BANNED', message: 'This account has been banned.' },
-      });
-    }
-
-    // 3. Verify password
-    const validPassword = await verifyPassword(password, user.password_hash);
-    if (!validPassword) {
-      return reply.status(401).send({
-        error: { code: 'INVALID_CREDENTIALS', message: 'Invalid username or password.' },
       });
     }
 
@@ -375,14 +382,38 @@ export default fp(async (fastify: FastifyInstance) => {
       });
     }
 
-    // 4. Token rotation: delete old session, create new session with new tokens
-    await deleteSession(fastify.db, session.id);
-
+    // 4. Token rotation: atomic delete + create prevents concurrent replay
     const tokenPayload = { userId: payload.userId, role: payload.role, username: payload.username };
     const newAccessToken = generateAccessToken(tokenPayload);
     const newRefreshToken = generateRefreshToken(tokenPayload);
+    const newTokenHash = hashToken(newRefreshToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    await createSession(fastify.db, payload.userId, newRefreshToken);
+    try {
+      await fastify.db.transaction(async (tx) => {
+        // Conditional delete — only one concurrent caller wins
+        const [deleted] = await tx.delete(sessions)
+          .where(eq(sessions.id, session.id))
+          .returning({ id: sessions.id });
+
+        if (!deleted) {
+          throw new Error('SESSION_ALREADY_CONSUMED');
+        }
+
+        await tx.insert(sessions).values({
+          user_id: payload.userId,
+          refresh_token_hash: newTokenHash,
+          expires_at: expiresAt,
+        });
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message === 'SESSION_ALREADY_CONSUMED') {
+        return reply.status(401).send({
+          error: { code: 'INVALID_REFRESH_TOKEN', message: 'Token has already been used.' },
+        });
+      }
+      throw err;
+    }
 
     return reply.status(200).send({
       data: {

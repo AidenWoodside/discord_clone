@@ -31,7 +31,9 @@ function validateConnectionUrl(url: string): void {
     throw new Error(`Invalid DATABASE_URL: protocol must be postgres or postgresql`);
   }
 
-  if (parsed.hostname.includes('supabase.com') && !url.includes('sslmode=require')) {
+  const isSupabase = parsed.hostname.endsWith('.supabase.co') ||
+                     parsed.hostname.endsWith('.supabase.com');
+  if (isSupabase && !url.includes('sslmode=require')) {
     throw new Error(`Supabase DATABASE_URL must include sslmode=require`);
   }
 }
@@ -51,7 +53,7 @@ export function createDatabase(connectionString?: string): DatabaseConnection {
         // Suppress Supabase's automatic RLS reminder notices
         if (notice.message?.includes('row-level security') || notice.message?.includes('RLS')) return;
         // Log all other Postgres notices — they may indicate real issues
-        console.warn('[postgres notice]', notice.message);
+        process.stderr.write(`[postgres notice] ${notice.message}\n`);
       },
       connection: {
         statement_timeout: 30000, // 30 seconds — prevent slow queries from holding pool connections

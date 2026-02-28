@@ -1,3 +1,5 @@
+# Local development: docker compose -f docker-compose.dev.yml up -d
+# Then set in .env: DATABASE_URL=postgresql://discord_clone:dev_password@localhost:5432/discord_clone_dev
 services:
   postgres:
     image: postgres:15-alpine

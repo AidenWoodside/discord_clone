@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { WebSocket } from 'ws';
-import type { WsMessage } from 'discord-clone-shared';
+import type { WsMessage, TextErrorPayload } from 'discord-clone-shared';
 import { WS_TYPES } from 'discord-clone-shared';
 
 export type WsHandler = (ws: WebSocket, message: WsMessage, userId: string) => void | Promise<void>;
@@ -47,7 +47,7 @@ export function routeMessage(ws: WebSocket, raw: string, userId: string, log: Fa
       try {
         ws.send(JSON.stringify({
           type: WS_TYPES.TEXT_ERROR,
-          payload: { error: 'INTERNAL_ERROR', tempId: '' },
+          payload: { error: 'INTERNAL_ERROR', tempId: '' } satisfies TextErrorPayload,
         }));
       } catch {
         // WS already dead

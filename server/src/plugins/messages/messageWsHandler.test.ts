@@ -36,6 +36,15 @@ function createMockLogger() {
   } as unknown as FastifyBaseLogger;
 }
 
+/** Wait for a mock function to be called, with timeout. */
+async function waitForCall(mockFn: ReturnType<typeof vi.fn>, timeoutMs = 2000): Promise<void> {
+  const start = Date.now();
+  while (mockFn.mock.calls.length === 0) {
+    if (Date.now() - start > timeoutMs) throw new Error('waitForCall timeout');
+    await new Promise(r => setTimeout(r, 10));
+  }
+}
+
 describe('messageWsHandler', () => {
   let app: FastifyInstance;
   let channelId: string;
@@ -72,12 +81,12 @@ describe('messageWsHandler', () => {
 
     const raw = JSON.stringify({
       type: 'text:send',
-      payload: { channelId, content: 'encrypted-blob', nonce: 'nonce-value' },
+      payload: { channelId, content: 'encrypted-blob', nonce: 'nonce-value', tempId: 'temp-123' },
       id: 'temp-123',
     });
 
     routeMessage(senderWs, raw, userId, mockLog);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForCall(senderWs.send as ReturnType<typeof vi.fn>);
 
     // Message stored in DB
     const stored = await app.db.select().from(messages).where(eq(messages.channel_id, channelId));
@@ -104,56 +113,73 @@ describe('messageWsHandler', () => {
     expect(sent.id).toBe('temp-123');
   });
 
-  it('closes connection on missing channelId', () => {
+  it('sends text:error on missing channelId', () => {
     const ws = createMockSocket();
     clients.set(userId, ws);
 
     const raw = JSON.stringify({
       type: 'text:send',
-      payload: { content: 'blob', nonce: 'nonce' },
+      payload: { content: 'blob', nonce: 'nonce', tempId: 'tmp-1' },
     });
 
     routeMessage(ws, raw, userId, mockLog);
-    expect(ws.close).toHaveBeenCalledWith(4002, 'Missing or invalid channelId');
+
+    expect(ws.send).toHaveBeenCalledOnce();
+    const sent = JSON.parse((ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
+    expect(sent.type).toBe('text:error');
+    expect(sent.payload.error).toBe('MISSING_CHANNEL_ID');
+    expect(sent.payload.tempId).toBe('tmp-1');
   });
 
-  it('closes connection on missing content', () => {
+  it('sends text:error on missing content', () => {
     const ws = createMockSocket();
     clients.set(userId, ws);
 
     const raw = JSON.stringify({
       type: 'text:send',
-      payload: { channelId, nonce: 'nonce' },
+      payload: { channelId, nonce: 'nonce', tempId: 'tmp-2' },
     });
 
     routeMessage(ws, raw, userId, mockLog);
-    expect(ws.close).toHaveBeenCalledWith(4002, 'Missing or invalid content');
+
+    expect(ws.send).toHaveBeenCalledOnce();
+    const sent = JSON.parse((ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
+    expect(sent.type).toBe('text:error');
+    expect(sent.payload.error).toBe('MISSING_CONTENT');
   });
 
-  it('closes connection on missing nonce', () => {
+  it('sends text:error on missing nonce', () => {
     const ws = createMockSocket();
     clients.set(userId, ws);
 
     const raw = JSON.stringify({
       type: 'text:send',
-      payload: { channelId, content: 'blob' },
+      payload: { channelId, content: 'blob', tempId: 'tmp-3' },
     });
 
     routeMessage(ws, raw, userId, mockLog);
-    expect(ws.close).toHaveBeenCalledWith(4002, 'Missing or invalid nonce');
+
+    expect(ws.send).toHaveBeenCalledOnce();
+    const sent = JSON.parse((ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
+    expect(sent.type).toBe('text:error');
+    expect(sent.payload.error).toBe('MISSING_NONCE');
   });
 
-  it('closes connection when content exceeds MAX_MESSAGE_LENGTH', () => {
+  it('sends text:error when content exceeds MAX_MESSAGE_LENGTH', () => {
     const ws = createMockSocket();
     clients.set(userId, ws);
 
     const raw = JSON.stringify({
       type: 'text:send',
-      payload: { channelId, content: 'a'.repeat(2001), nonce: 'nonce' },
+      payload: { channelId, content: 'a'.repeat(2001), nonce: 'nonce', tempId: 'tmp-4' },
     });
 
     routeMessage(ws, raw, userId, mockLog);
-    expect(ws.close).toHaveBeenCalledWith(4002, 'Message content exceeds maximum length');
+
+    expect(ws.send).toHaveBeenCalledOnce();
+    const sent = JSON.parse((ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
+    expect(sent.type).toBe('text:error');
+    expect(sent.payload.error).toBe('MESSAGE_TOO_LONG');
   });
 
   it('does not send to clients with closed connections', async () => {
@@ -164,11 +190,11 @@ describe('messageWsHandler', () => {
 
     const raw = JSON.stringify({
       type: 'text:send',
-      payload: { channelId, content: 'blob', nonce: 'nonce' },
+      payload: { channelId, content: 'blob', nonce: 'nonce', tempId: 'tmp-5' },
     });
 
     routeMessage(senderWs, raw, userId, mockLog);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForCall(senderWs.send as ReturnType<typeof vi.fn>);
 
     expect(senderWs.send).toHaveBeenCalledOnce();
     expect(closedWs.send).not.toHaveBeenCalled();
@@ -180,12 +206,12 @@ describe('messageWsHandler', () => {
 
     const raw = JSON.stringify({
       type: 'text:send',
-      payload: { channelId, content: 'blob', nonce: 'nonce' },
+      payload: { channelId, content: 'blob', nonce: 'nonce', tempId: 'my-temp-id' },
       id: 'my-temp-id',
     });
 
     routeMessage(senderWs, raw, userId, mockLog);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForCall(senderWs.send as ReturnType<typeof vi.fn>);
 
     expect(senderWs.send).toHaveBeenCalledOnce();
     const sent = JSON.parse((senderWs.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
@@ -199,16 +225,16 @@ describe('messageWsHandler', () => {
 
     const raw = JSON.stringify({
       type: 'text:send',
-      payload: { channelId: '00000000-0000-0000-0000-000000000099', content: 'blob', nonce: 'nonce' },
+      payload: { channelId: '00000000-0000-0000-0000-000000000099', content: 'blob', nonce: 'nonce', tempId: 'tmp-err' },
     });
 
     routeMessage(ws, raw, userId, mockLog);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForCall(ws.send as ReturnType<typeof vi.fn>);
 
-    expect(ws.send).toHaveBeenCalled();
     const sent = JSON.parse((ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
     expect(sent.type).toBe('text:error');
     expect(sent.payload.error).toBe('MESSAGE_STORE_FAILED');
+    expect(sent.payload.tempId).toBe('tmp-err');
     expect((mockLog.error as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
   });
 
@@ -221,11 +247,11 @@ describe('messageWsHandler', () => {
 
     const raw = JSON.stringify({
       type: 'text:send',
-      payload: { channelId, content: 'blob', nonce: 'nonce' },
+      payload: { channelId, content: 'blob', nonce: 'nonce', tempId: 'tmp-6' },
     });
 
     routeMessage(senderWs, raw, userId, mockLog);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForCall(mockLog.warn as ReturnType<typeof vi.fn>);
 
     expect((mockLog.warn as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
     // Sender still receives (broadcast continues despite one client failing)

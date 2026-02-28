@@ -36,6 +36,8 @@ export default fp(async (fastify: FastifyInstance) => {
               'Database unreachable after %d consecutive checks — exiting',
               MAX_HEALTH_FAILURES,
             );
+            // Graceful shutdown: drain pool before exit to release Supabase connections
+            await fastify.close();
             process.exit(1);
           }
         }

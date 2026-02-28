@@ -9,6 +9,25 @@ permissions:
   pull-requests: read
 
 jobs:
+  lint-pr-title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            fix
+            feat
+            chore
+            ci
+            docs
+            deps
+            refactor
+            test
+            perf
+            revert
+
   check-paths:
     runs-on: ubuntu-latest
     outputs:

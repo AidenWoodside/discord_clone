@@ -31,3 +31,7 @@ docker/nginx/nginx.conf.bak
 infrastructure/.terraform/
 infrastructure/*.tfstate
 infrastructure/*.tfstate.backup
+infrastructure/*.tfvars
+infrastructure/bootstrap/.terraform/
+infrastructure/bootstrap/*.tfstate
+infrastructure/bootstrap/*.tfstate.backup

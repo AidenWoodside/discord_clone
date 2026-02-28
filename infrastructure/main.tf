@@ -16,11 +16,12 @@ provider "aws" {
 # --- Security Group ---
 
 resource "aws_security_group" "app" {
-  name        = "discord-clone-app"
-  description = "Discord Clone production security group"
+  name        = "discweeds-sg"
+  description = "allows disc weeds cicd"
 
   # HTTPS
   ingress {
+    description = "web traffic"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
@@ -29,32 +30,44 @@ resource "aws_security_group" "app" {
 
   # HTTP (redirect to HTTPS + ACME challenge)
   ingress {
+    description = "Lets Encrypt + redirect"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # SSH access (to be removed after SSM is verified — Task 4.7)
+  ingress {
+    description = "SSH access"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   # TURN/STUN (coturn)
   ingress {
+    description = "STUN"
     from_port   = 3478
     to_port     = 3478
-    protocol    = "udp"
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   # TURN relay ports (coturn)
   ingress {
+    description = "TURN/media relay"
     from_port   = 49152
     to_port     = 49252
     protocol    = "udp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # mediasoup RTP ports
+  # mediasoup RTP ports (40000-49999 currently, narrow to 40000-40099 after Phase 3 deploy)
   ingress {
     from_port   = 40000
-    to_port     = 40099
+    to_port     = 49999
     protocol    = "udp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -67,22 +80,19 @@ resource "aws_security_group" "app" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Name = "discord-clone-app"
-  }
 }
 
 # --- EC2 Instance ---
 
 resource "aws_instance" "app" {
   ami                    = var.ami_id
-  instance_type          = var.instance_type
+  instance_type          = "t3a.medium"
   iam_instance_profile   = aws_iam_instance_profile.ec2.name
   vpc_security_group_ids = [aws_security_group.app.id]
 
   root_block_device {
-    volume_size = 30
-    encrypted   = true
+    volume_size = 8
+    encrypted   = false
   }
 
   user_data = <<-EOF
@@ -109,11 +119,11 @@ resource "aws_instance" "app" {
   EOF
 
   tags = {
-    Name = "discord-clone"
+    Name = "discweeds"
   }
 
   lifecycle {
-    ignore_changes = [ami, user_data]
+    ignore_changes = [ami, user_data, key_name]
   }
 }
 
@@ -216,6 +226,10 @@ resource "aws_iam_openid_connect_provider" "github" {
     "6938fd4d98bab03faadb97b34396831e3780aea1",
     "1c58a3a8518e8759bf075b76b750d4f2df264fcd"
   ]
+
+  lifecycle {
+    ignore_changes = [tags, tags_all, thumbprint_list]
+  }
 }
 
 # --- IAM Role for GitHub Actions Deploy ---
@@ -283,7 +297,7 @@ resource "aws_iam_role_policy" "deploy_s3" {
 # --- S3 Bucket for Download Assets ---
 
 resource "aws_s3_bucket" "assets" {
-  bucket = "discord-clone-assets"
+  bucket = "discord-clone-assets-966917019849"
 }
 
 resource "aws_s3_bucket_versioning" "assets" {
@@ -299,6 +313,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "assets" {
   rule {
     id     = "expire-old-assets"
     status = "Enabled"
+
+    filter {}
 
     expiration {
       days = 90

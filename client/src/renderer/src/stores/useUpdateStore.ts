@@ -29,16 +29,19 @@ export const useUpdateStore = create<UpdateState & UpdateActions>()((set) => ({
   ...initialState,
 
   checkForUpdates: () => {
+    if (!window.api?.updater) return;
     set({ status: 'checking', error: null });
     window.api.updater.checkForUpdates();
   },
 
   downloadUpdate: () => {
+    if (!window.api?.updater) return;
     set({ status: 'downloading', downloadProgress: 0 });
     window.api.updater.downloadUpdate();
   },
 
   quitAndInstall: () => {
+    if (!window.api?.updater) return;
     window.api.updater.quitAndInstall();
   },
 
@@ -51,6 +54,10 @@ export const useUpdateStore = create<UpdateState & UpdateActions>()((set) => ({
   },
 
   initUpdateListeners: () => {
+    if (!window.api?.updater) {
+      return () => {};
+    }
+
     const cleanupAvailable = window.api.updater.onUpdateAvailable((info) => {
       set({
         status: 'available',

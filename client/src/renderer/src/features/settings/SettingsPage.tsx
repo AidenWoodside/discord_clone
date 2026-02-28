@@ -1,12 +1,23 @@
 import React, { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { AudioSettings } from './AudioSettings';
+import useAuthStore from '../../stores/useAuthStore';
 
 interface SettingsPageProps {
   onClose: () => void;
 }
 
 export function SettingsPage({ onClose }: SettingsPageProps): React.ReactNode {
+  const logout = useAuthStore((s) => s.logout);
+  const navigate = useNavigate();
+
+  const handleLogout = async (): Promise<void> => {
+    await logout();
+    onClose();
+    navigate('/login');
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
@@ -31,6 +42,15 @@ export function SettingsPage({ onClose }: SettingsPageProps): React.ReactNode {
       </div>
       <div className="max-w-2xl">
         <AudioSettings />
+      </div>
+      <div className="mt-auto border-t border-border-default px-4 py-4">
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-2 text-sm text-status-dnd hover:text-red-400 transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:ring-offset-0 focus-visible:outline-none rounded px-2 py-1.5"
+        >
+          <LogOut size={16} />
+          Log Out
+        </button>
       </div>
     </div>
   );

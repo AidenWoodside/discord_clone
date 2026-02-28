@@ -28,6 +28,11 @@ interface AuthState {
 
 let restoreInFlight = false;
 
+// Scope crypto keys per user so multi-account devices don't overwrite each other
+function userKey(userId: string, key: string): string {
+  return `${key}:${userId}`;
+}
+
 const useAuthStore = create<AuthState>((set, get) => {
   // Configure the API client to integrate with this store
   configureApiClient({
@@ -75,14 +80,6 @@ const useAuthStore = create<AuthState>((set, get) => {
           body: JSON.stringify({ username, password }),
         });
 
-        set({
-          user: data.user,
-          accessToken: data.accessToken,
-          refreshToken: data.refreshToken,
-          isLoading: false,
-          error: null,
-        });
-
         // Persist tokens to safeStorage
         try {
           await window.api.secureStorage.set('accessToken', data.accessToken);
@@ -91,24 +88,35 @@ const useAuthStore = create<AuthState>((set, get) => {
           console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
         }
 
-        // Decrypt group key if available
+        // Decrypt group key BEFORE setting user — setting user triggers navigation
+        // and components will immediately try to use groupKey
+        const uid = data.user.id;
+        let groupKey: Uint8Array | null = null;
         if (data.encryptedGroupKey) {
           try {
             await initializeSodium();
-            const privateKeyB64 = await window.api.secureStorage.get('private-key');
-            const publicKeyB64 = await window.api.secureStorage.get('public-key');
+            const privateKeyB64 = await window.api.secureStorage.get(userKey(uid, 'private-key'));
+            const publicKeyB64 = await window.api.secureStorage.get(userKey(uid, 'public-key'));
             if (privateKeyB64 && publicKeyB64) {
               const privateKey = deserializeKey(privateKeyB64);
               const publicKey = deserializeKey(publicKeyB64);
-              const groupKey = decryptGroupKey(data.encryptedGroupKey, publicKey, privateKey);
-              set({ groupKey });
+              groupKey = decryptGroupKey(data.encryptedGroupKey, publicKey, privateKey);
             }
             // Store encrypted group key for session restoration
-            await window.api.secureStorage.set('encrypted-group-key', data.encryptedGroupKey);
+            await window.api.secureStorage.set(userKey(uid, 'encrypted-group-key'), data.encryptedGroupKey);
           } catch (err) {
             console.warn('Failed to decrypt group key:', err instanceof Error ? err.message : err);
           }
         }
+
+        set({
+          user: data.user,
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          groupKey,
+          isLoading: false,
+          error: null,
+        });
       } catch (err: unknown) {
         const error = err as { code?: string; message?: string };
         let message = 'Login failed. Please try again.';
@@ -142,12 +150,14 @@ const useAuthStore = create<AuthState>((set, get) => {
           }),
         });
 
-        // Store keys in safeStorage
+        const uid = data.user.id;
+
+        // Store keys in safeStorage (scoped per user)
         try {
-          await window.api.secureStorage.set('private-key', serializeKey(secretKey));
-          await window.api.secureStorage.set('public-key', serializeKey(publicKey));
+          await window.api.secureStorage.set(userKey(uid, 'private-key'), serializeKey(secretKey));
+          await window.api.secureStorage.set(userKey(uid, 'public-key'), serializeKey(publicKey));
           if (data.encryptedGroupKey) {
-            await window.api.secureStorage.set('encrypted-group-key', data.encryptedGroupKey);
+            await window.api.secureStorage.set(userKey(uid, 'encrypted-group-key'), data.encryptedGroupKey);
           }
         } catch (err) {
           console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
@@ -208,12 +218,14 @@ const useAuthStore = create<AuthState>((set, get) => {
           }),
         });
 
-        // Store keys in safeStorage
+        const uid = data.user.id;
+
+        // Store keys in safeStorage (scoped per user)
         try {
-          await window.api.secureStorage.set('private-key', serializeKey(secretKey));
-          await window.api.secureStorage.set('public-key', serializeKey(publicKey));
+          await window.api.secureStorage.set(userKey(uid, 'private-key'), serializeKey(secretKey));
+          await window.api.secureStorage.set(userKey(uid, 'public-key'), serializeKey(publicKey));
           if (data.encryptedGroupKey) {
-            await window.api.secureStorage.set('encrypted-group-key', data.encryptedGroupKey);
+            await window.api.secureStorage.set(userKey(uid, 'encrypted-group-key'), data.encryptedGroupKey);
           }
         } catch (err) {
           console.warn('safeStorage unavailable:', err instanceof Error ? err.message : err);
@@ -346,31 +358,34 @@ const useAuthStore = create<AuthState>((set, get) => {
 
           // Decode user info from the new access token (JWT payload)
           const payload = JSON.parse(atob(data.accessToken.split('.')[1]));
-          set({
-            user: { id: payload.userId, username: payload.username, role: payload.role },
-            accessToken: data.accessToken,
-            refreshToken: data.refreshToken,
-            isLoading: false,
-          });
+          const uid = payload.userId;
 
           await window.api.secureStorage.set('accessToken', data.accessToken);
           await window.api.secureStorage.set('refreshToken', data.refreshToken);
 
-          // Restore group key from safeStorage
+          // Restore group key from safeStorage (scoped per user)
+          let groupKey: Uint8Array | null = null;
           try {
             await initializeSodium();
-            const privateKeyB64 = await window.api.secureStorage.get('private-key');
-            const publicKeyB64 = await window.api.secureStorage.get('public-key');
-            const encryptedGroupKeyB64 = await window.api.secureStorage.get('encrypted-group-key');
+            const privateKeyB64 = await window.api.secureStorage.get(userKey(uid, 'private-key'));
+            const publicKeyB64 = await window.api.secureStorage.get(userKey(uid, 'public-key'));
+            const encryptedGroupKeyB64 = await window.api.secureStorage.get(userKey(uid, 'encrypted-group-key'));
             if (privateKeyB64 && publicKeyB64 && encryptedGroupKeyB64) {
               const privateKey = deserializeKey(privateKeyB64);
               const publicKey = deserializeKey(publicKeyB64);
-              const groupKey = decryptGroupKey(encryptedGroupKeyB64, publicKey, privateKey);
-              set({ groupKey });
+              groupKey = decryptGroupKey(encryptedGroupKeyB64, publicKey, privateKey);
             }
           } catch (err) {
             console.warn('Failed to restore group key:', err instanceof Error ? err.message : err);
           }
+
+          set({
+            user: { id: uid, username: payload.username, role: payload.role },
+            accessToken: data.accessToken,
+            refreshToken: data.refreshToken,
+            groupKey,
+            isLoading: false,
+          });
         } catch (err) {
           console.warn('Session restore failed, clearing tokens:', err instanceof Error ? err.message : err);
           // Tokens are invalid, clear everything

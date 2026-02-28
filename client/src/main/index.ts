@@ -38,7 +38,7 @@ function setupContentSecurityPolicy(): void {
 
   const csp = [
     "default-src 'self'",
-    `script-src 'self'${is.dev ? " 'unsafe-inline'" : ''}`,
+    `script-src 'self' 'wasm-unsafe-eval'${is.dev ? " 'unsafe-inline'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
     `connect-src ${apiUrl} ${wsUrl} ${wssUrl}${devSources}`,
     "media-src 'self' blob: mediastream:",

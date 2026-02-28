@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.99.128](https://github.com/AidenWoodside/discord_clone/compare/v0.99.127...v0.99.128) (2026-02-28)
+
+
+### Bug Fixes
+
+* skip step-5 migration on cold start (already ran in step 3a) ([#54](https://github.com/AidenWoodside/discord_clone/issues/54)) ([73db58f](https://github.com/AidenWoodside/discord_clone/commit/73db58f9e6390d9380ce78c12c08b28409ab67fd))
+
 ## [0.99.127](https://github.com/AidenWoodside/discord_clone/compare/v0.99.126...v0.99.127) (2026-02-28)
 
 

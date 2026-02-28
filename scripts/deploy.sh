@@ -89,10 +89,13 @@ done
 
 # 5. Run database migrations on new slot against Supabase (old slot still serves traffic)
 # Both slots can safely connect to Supabase concurrently — Postgres handles concurrent access.
-if ! docker compose exec -T "app-$NEW" node server/dist/scripts/migrate.js 2>&1; then
-  echo "FATAL: database migration failed on app-$NEW (Supabase)"
-  docker compose stop "app-$NEW"
-  exit 1
+# Skip if already ran during cold start (step 3a)
+if [ "$ACTIVE" != "none" ]; then
+  if ! docker compose exec -T "app-$NEW" node server/dist/scripts/migrate.js 2>&1; then
+    echo "FATAL: database migration failed on app-$NEW (Supabase)"
+    docker compose stop "app-$NEW"
+    exit 1
+  fi
 fi
 
 # 6. Drain old slot — signal clients to reconnect

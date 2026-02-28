@@ -288,15 +288,26 @@ The `scripts/setup.sh` script:
 
 ### Release Process
 
-1. Update version in root `package.json`
-2. Commit and push to `main`
-3. Create and push a tag: `git tag v0.x.x && git push --tags`
-4. The `release.yml` workflow automatically:
-   - Validates tag matches package.json version
+Releases are fully automated via [release-please](https://github.com/googleapis/release-please).
+
+1. Create a feature branch and make changes
+2. Open a PR to `main` — the title **must** follow [Conventional Commits](https://www.conventionalcommits.org/) (enforced by CI)
+   - `fix: ...` — patch version bump
+   - `feat: ...` — minor version bump
+   - `feat!: ...` or `BREAKING CHANGE:` — major version bump
+   - `chore:`, `ci:`, `docs:`, `deps:`, `refactor:`, `test:`, `perf:`, `revert:` — no version bump on their own
+3. Merge the PR into `main`
+4. release-please automatically opens/updates a **Release PR** that bumps `package.json` and updates `CHANGELOG.md`
+5. When ready to release, merge the Release PR — this creates a `v*` tag
+6. The `release.yml` workflow triggers automatically and:
+   - Validates tag matches `package.json` version
    - Builds Electron app for macOS, Windows, Linux
+   - Builds and pushes the server Docker image
    - Publishes to GitHub Releases
    - Deploys server to EC2 (with rollback on failure)
-   - Uploads desktop installers to EC2 for landing page downloads
+   - Uploads desktop installers to S3 for landing page downloads
+
+> **Note:** Never manually bump versions in `package.json` or create `v*` tags — release-please handles both.
 
 ### Docker Services (Production)
 
@@ -314,16 +325,26 @@ All services use `network_mode: host` for mediasoup UDP port compatibility.
 ### Pull Request (`ci.yml`)
 
 Triggered on PRs to `main`. Must pass before merge:
-1. Install dependencies
-2. Build shared
-3. Lint (entire monorepo)
-4. Test shared → server → client
-5. Build server + client (verify compilation)
+1. **lint-pr-title** — validates PR title follows Conventional Commits format
+2. Install dependencies
+3. Build shared
+4. Lint (entire monorepo)
+5. Test shared → server → client
+6. Build server + client (verify compilation)
+
+### Release Please (`release-please.yml`)
+
+Triggered on every push to `main`:
+- Parses Conventional Commit messages since the last release
+- Opens or updates a Release PR with version bump and changelog
+- On merge, creates the `v*` tag that triggers the release workflow
 
 ### Release (`release.yml`)
 
-Triggered on `v*` tags:
+Triggered on `v*` tags (created by release-please):
 1. **validate-version** — tag matches `package.json` version
-2. **build-electron** — matrix build (macOS + Windows + Linux)
-3. **publish-release** — publish draft GitHub Release
-4. **deploy-server** — SSH to EC2, Docker rebuild, health check with rollback
+2. **detect-changes** — determines which components changed since the previous tag
+3. **build-electron** — matrix build (macOS + Windows + Linux), conditional on client changes
+4. **build-server-image** — Docker image build + push to GHCR, conditional on server changes
+5. **publish-release** — publish draft GitHub Release + upload installers to S3
+6. **deploy-server** — deploy via SSM to EC2 with health check

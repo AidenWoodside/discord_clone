@@ -1,9 +1,8 @@
-# Release Process (fully automated):
-# 1. Update version in root package.json (single source of truth)
-# 2. Commit: "Release vX.Y.Z"
-# 3. Tag: git tag vX.Y.Z
-# 4. Push: git push && git push --tags
-# Everything else happens automatically.
+# Release Process (fully automated via release-please):
+# 1. Merge PRs to main using Conventional Commit prefixes (fix:, feat:, etc.)
+# 2. release-please automatically opens/updates a Release PR
+# 3. Merge the Release PR when ready to release
+# 4. release-please creates the v* tag, triggering this workflow
 #
 # Conditional builds: only client or server jobs run based on what changed
 # since the previous tag. shared/ changes trigger both sides.

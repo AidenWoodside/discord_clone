@@ -6,7 +6,7 @@ status: 'ready-for-dev'
 stepsCompleted: [1, 2, 3, 4]
 tech_stack: ['Docker Compose', 'GHCR', 'Trivy', 'AWS SSM', 'AWS OIDC', 'Terraform', 'CloudWatch', 'Nginx 1.27-alpine', 'GitHub Actions', 'coturn/coturn:4.6.3', 'certbot/certbot:v3.1.0', 'node:20-alpine']
 files_to_modify: ['docker-compose.yml', '.github/workflows/release.yml', 'docker/nginx/nginx.conf', 'docker/nginx/nginx.conf.template', 'server/Dockerfile', 'server/src/index.ts', 'scripts/setup.sh', 'scripts/deploy.sh', 'scripts/rollback-config.sh', '.env.example', 'docker/coturn/turnserver.prod.conf', 'infrastructure/main.tf', 'infrastructure/bootstrap/main.tf']
-code_patterns: ['GitHub Actions OIDC federation', 'AWS SSM Run Command with structured status parsing', 'Blue-green Docker deployment with split mediasoup UDP ranges', 'GHCR image tagging (SHA + semver + latest)', 'Terraform HCL for EC2 + IAM + SG + S3', 'Fastify onClose hook for graceful shutdown', 'Docker Compose profiles for deploy-only containers', 'nginx upstream switching via template + nginx -t validation + reload', 'SSM secrets passed as environment overrides (no file on disk)', 'Application-level connection draining via /api/drain endpoint', 'Database migration guard via RUN_MIGRATIONS env var']
+code_patterns: ['GitHub Actions OIDC federation', 'AWS SSM Run Command with structured status parsing', 'Blue-green Docker deployment with split mediasoup UDP ranges', 'GHCR image tagging (SHA + semver + latest)', 'Terraform HCL for EC2 + IAM + SG + S3', 'Fastify onClose hook for graceful shutdown (pool drain + mediasoup)', 'Docker Compose profiles for deploy-only containers', 'nginx upstream switching via template + nginx -t validation + reload', 'SSM secrets passed as environment overrides (no file on disk)', 'Application-level connection draining via /api/drain endpoint', 'Database migration guard via RUN_MIGRATIONS env var', 'DATABASE_URL for Supabase managed Postgres (no local DB volume)']
 test_patterns: ['No automated tests — infrastructure validated by dry-run, health checks, and manual verification', 'Blue-green rollback tested by deploying broken image', 'CloudWatch verified by checking log group population']
 ---
 
@@ -27,7 +27,7 @@ Implement the full deployment architecture review across 6 phased stories — fr
 ### Scope
 
 **In Scope:**
-- **Phase 1:** Docker Compose hardening (resource limits, log rotation, health check start_period, image pinning, security_opt, depends_on conditions, named volumes) + minimal server lifecycle changes for container orchestration (SIGTERM handler, graceful shutdown)
+- **Phase 1:** Docker Compose hardening (resource limits, log rotation, health check start_period, image pinning, security_opt, depends_on conditions, read_only filesystem) + minimal server lifecycle changes for container orchestration (SIGTERM handler, graceful shutdown)
 - **Phase 2:** GHCR container registry + Trivy scanning + image-based rollback
 - **Phase 3:** Bridge networking for app/nginx/certbot (100-port mediasoup range), host mode only for coturn
 - **Phase 4:** AWS SSM + OIDC replacing SSH deployment, environment protection rules, close port 22
@@ -36,9 +36,11 @@ Implement the full deployment architecture review across 6 phased stories — fr
 
 **Out of Scope:**
 - Application feature/logic changes (Fastify routes, React UI, mediasoup call logic)
-- Database migrations or schema changes
+- Database migrations or schema changes (Supabase migration is a prerequisite — see `tech-spec-supabase-migration.md`)
 - Electron client build/distribution changes
 - Multi-instance / auto-scaling architecture
+
+**Prerequisite:** The Supabase migration (`tech-spec-supabase-migration.md`) must be completed before implementing this spec. That migration removes SQLite entirely — the app connects to Supabase-hosted PostgreSQL via `DATABASE_URL` with no local database volume. All references in this spec reflect the post-Supabase state.
 
 ## Context for Development
 
@@ -55,7 +57,7 @@ Implement the full deployment architecture review across 6 phased stories — fr
 **Docker Compose (current `docker-compose.yml`):**
 - 4 services: `app`, `coturn`, `nginx`, `certbot`
 - ALL services use `network_mode: host` — zero network isolation
-- `app` builds from `server/Dockerfile` (context: `.`), env from `.env`, volume `./data/sqlite:/app/data`
+- `app` builds from `server/Dockerfile` (context: `.`), env from `.env`, `DATABASE_URL` points to Supabase (no local DB volume)
 - `coturn` uses `coturn/coturn:latest` (unpinned), volume mounts `turnserver.prod.conf:ro`
 - `nginx` uses `nginx:alpine` (unpinned), depends on `app` (no health condition), volumes for config/landing/downloads/certs
 - `certbot` uses `certbot/certbot`, renewal loop via entrypoint, depends on `nginx`
@@ -73,7 +75,7 @@ Implement the full deployment architecture review across 6 phased stories — fr
 **Server Application:**
 - `server/src/index.ts`: Entry point — NO SIGTERM handler. Calls `buildApp()` + `app.listen()` but never `app.close()` on signal
 - `server/src/app.ts:55`: `onClose` hook wired to `closeMediasoup()` — will execute IF `app.close()` is called
-- Health endpoint at `app.ts:59`: `GET /api/health` — checks DB connectivity via `SELECT 1`
+- Health endpoint at `app.ts:59`: `GET /api/health` — checks Supabase connectivity via `SELECT 1` (plus periodic health monitor with consecutive-failure threshold added by Supabase migration)
 - Mediasoup port range: `MEDIASOUP_MIN_PORT` / `MEDIASOUP_MAX_PORT` read from env (defaults 40000-49999)
 - `.env.example` has all env vars including `MEDIASOUP_MIN_PORT=40000`, `MEDIASOUP_MAX_PORT=49999`
 
@@ -122,8 +124,8 @@ Implement the full deployment architecture review across 6 phased stories — fr
 - **Networking:** Custom `backend` bridge network for app/nginx/certbot. Host mode only for coturn (UDP relay needs raw port access). Mediasoup port range reduced from 40000-49999 to 40000-40099 (100 ports via `.env`). **Capacity analysis:** Each mediasoup WebRtcTransport consumes 1 UDP port for ICE. Each peer in a voice channel needs ~2 ports (send + receive transport). With blue-green split (50 ports per slot), each slot supports ~25 concurrent voice users. This is acceptable for the project's expected scale. If concurrent voice users exceed 20, widen the range (e.g., 40000-40499 per slot), update the security group, and redeploy
 - **Deployment method:** AWS SSM + OIDC — short-lived credentials, no SSH keys, no port 22, full CloudTrail audit. IAM role trust policy scoped to `repo:AidenWoodside/discord_clone:ref:refs/tags/v*`
 - **Zero-downtime:** Blue-green with `app-blue` (port 3001, UDP 40000-40049) and `app-green` (port 3002, UDP 40050-40099). Deploy script determines active slot by inspecting running containers (no ephemeral state file). Nginx upstream switched via template (`nginx.conf.template` with `{{UPSTREAM}}` placeholder) + `nginx -t` validation + `nginx -s reload`, with full rollback on failure. Green uses Docker Compose `profiles: [deploy]` — only started during deploys. Both slots use `restart: unless-stopped` for crash recovery
-- **Graceful shutdown:** Add SIGTERM handler to `server/src/index.ts` calling `app.close()` (Phase 1, Task 1.9 — container lifecycle hygiene, not deferred to Phase 5). `stop_grace_period: 30s` on both app containers
-- **Secrets:** AWS SSM Parameter Store with `SecureString` type (KMS encryption). Fetched at deploy time, passed as env vars — no `.env` file on disk. Secrets: `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `TURN_SECRET`, `GROUP_ENCRYPTION_KEY`
+- **Graceful shutdown:** Add SIGTERM handler to `server/src/index.ts` calling `app.close()` (Phase 1, Task 1.9 — container lifecycle hygiene, not deferred to Phase 5). `stop_grace_period: 30s` on both app containers. The `onClose` hook drains the Supabase connection pool (via `close()` from `createDatabase()`) and shuts down mediasoup workers
+- **Secrets:** AWS SSM Parameter Store with `SecureString` type (KMS encryption). Fetched at deploy time, passed as env vars — no `.env` file on disk. Secrets: `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `TURN_SECRET`, `GROUP_ENCRYPTION_KEY`, `DATABASE_URL` (Supabase connection string containing password — must be treated as a secret)
 - **Logging:** Phase 1 uses `json-file` driver with `max-size: 10m`, `max-file: 5`. Phase 6 switches to `awslogs` driver shipping to CloudWatch log groups `/discord-clone/production/{service}`
 - **IaC:** Terraform for EC2 instance, security group (443, 80, 3478 UDP, 49152-49252 UDP, 40000-40099 UDP), IAM role + instance profile (SSM + CloudWatch), OIDC provider. State stored in S3 + DynamoDB lock
 - **Uptime:** External monitoring service (UptimeRobot/Better Stack) hitting `https://discweeds.com/api/health` every 60s
@@ -205,18 +207,18 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     cap_add:
       - NET_BIND_SERVICE
     ```
-  - Notes: `no-new-privileges` prevents privilege escalation. `cap_drop: ALL` removes all Linux capabilities. Nginx needs `NET_BIND_SERVICE` for ports 80/443. Do NOT add `read_only: true` yet — app writes to SQLite volume and nginx needs `/var/cache/nginx`
-
-- [ ] Task 1.7: Convert SQLite bind mount to named volume
-  - File: `docker-compose.yml`
-  - Action: Change `app` volume from `./data/sqlite:/app/data` to `sqlite_data:/app/data`. Add `volumes:` section at bottom:
+    Add `read_only: true` to the `app` service (no local DB writes after Supabase migration — the app only connects to external Supabase via `DATABASE_URL`). Add a `tmpfs` mount for any temp file needs:
     ```yaml
-    volumes:
-      sqlite_data:
-        driver: local
+    read_only: true
+    tmpfs:
+      - /tmp
     ```
-    Keep nginx/coturn/certbot bind mounts (config files need host filesystem access)
-  - Notes: Named volumes are managed by Docker, survive `docker compose down`, and avoid host permission issues
+  - Notes: `no-new-privileges` prevents privilege escalation. `cap_drop: ALL` removes all Linux capabilities. Nginx needs `NET_BIND_SERVICE` for ports 80/443. The app container can be `read_only: true` because there is no local database — all data is stored in Supabase. Nginx still needs writable `/var/cache/nginx` so do NOT add `read_only` to nginx
+
+- [ ] Task 1.7: Verify SQLite volume is removed from Docker Compose
+  - File: `docker-compose.yml`
+  - Action: Confirm that the `./data/sqlite:/app/data` volume mount has been removed from the `app` service (done by the Supabase migration). The app container should have no data volumes — it connects to Supabase via `DATABASE_URL`. Keep nginx/coturn/certbot bind mounts (config files need host filesystem access). Remove the `./data/sqlite` directory from EC2 after verifying Supabase migration is complete. No `volumes:` section needed for database storage.
+  - Notes: The Supabase migration eliminates local database storage entirely. If the old `./data/sqlite` directory still exists on EC2, it can be archived and deleted. The app container is now stateless (all state in Supabase)
 
 - [ ] Task 1.8: Add GitHub environment protection rules
   - File: N/A (GitHub Settings)
@@ -235,7 +237,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     process.on('SIGTERM', shutdown);
     process.on('SIGINT', shutdown);
     ```
-  - Notes: This ensures `app.close()` is called, which triggers the `onClose` hook that calls `closeMediasoup()`. Without this, Docker's SIGTERM is ignored and the process is force-killed after `stop_grace_period`. This is container lifecycle hygiene — required for clean shutdowns regardless of blue-green deployment. Moving this to Phase 1 allows early validation of graceful shutdown behavior
+  - Notes: This ensures `app.close()` is called, which triggers the `onClose` hooks: the db plugin drains the Supabase connection pool (via `close()` from `createDatabase()`), clears the health check timer, and then `closeMediasoup()` shuts down workers. Without this, Docker's SIGTERM is ignored and the process is force-killed after `stop_grace_period`, leaving Supabase connections in a stale state. This is container lifecycle hygiene — required for clean shutdowns regardless of blue-green deployment. Moving this to Phase 1 allows early validation of graceful shutdown behavior
 
 #### Acceptance Criteria
 
@@ -244,9 +246,9 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
 - [ ] AC 1.3: Given nginx depends on app with `condition: service_healthy`, when `docker compose up -d` is run, then nginx starts only after the app health check passes
 - [ ] AC 1.4: Given `nginx:1.27-alpine` and `coturn/coturn:4.6.3` are pinned, when `docker compose pull` is run, then it pulls those exact versions (not latest)
 - [ ] AC 1.5: Given the app container is running, when `docker inspect` is run on it, then `NoNewPrivileges` is `true` and `CapDrop` includes `ALL`
-- [ ] AC 1.6: Given the SQLite named volume, when `docker compose down` is run (without `-v`), then the database data persists and is available on next `docker compose up`
+- [ ] AC 1.6: Given the app container has no local database volume (Supabase is external), when `docker compose down` and `docker compose up -d` are run, then the app reconnects to Supabase and all data is intact (no local storage dependency)
 - [ ] AC 1.7: Given `deploy-server` job has `environment: production`, when a tag is pushed, then GitHub requires manual approval before the deploy job runs
-- [ ] AC 1.8: Given SIGTERM is sent to the app container, when `docker stop` is called, then `app.close()` executes, mediasoup workers are shut down, and in-flight requests complete before exit
+- [ ] AC 1.8: Given SIGTERM is sent to the app container, when `docker stop` is called, then `app.close()` executes, the Supabase connection pool is drained, the health check timer is cleared, mediasoup workers are shut down, and in-flight requests complete before exit
 
 ---
 
@@ -329,7 +331,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
 
 - [ ] Task 2.6: Update .env.example with IMAGE_TAG variable
   - File: `.env.example`
-  - Action: Add `IMAGE_TAG=latest` with comment explaining it's set by the deploy pipeline
+  - Action: Add `IMAGE_TAG=latest` with comment explaining it's set by the deploy pipeline. Verify that `DATABASE_URL` (from Supabase migration) is present and `DATABASE_PATH` has been removed
 
 #### Acceptance Criteria
 
@@ -567,11 +569,11 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
   - Action: Replace the `app` service with `app-blue` and `app-green`. This is where the port changes from 3000 (Phase 3 default) to 3001/3002 for the two slots:
     - `app-blue`: image `ghcr.io/aidenwoodside/discord-clone-server:${IMAGE_TAG:-latest}`, `PORT=3001`, networks `backend`, `restart: unless-stopped`, all resource limits/logging/security from Phase 1, health check on port 3001, mediasoup ports 40000-40049
     - `app-green`: identical but `PORT=3002`, health check on port 3002, `restart: unless-stopped`, `profiles: [deploy]` (only started during deploys), mediasoup ports 40050-40099
-    - Both share the `sqlite_data` volume
+    - No shared data volumes needed — both slots connect to the same Supabase instance via `DATABASE_URL`
     - Both have `stop_grace_period: 30s`, `RUN_MIGRATIONS=false`
     - Published ports: `3001:3001` for blue, `3002:3002` for green
     - UDP ports: `40000-40049:40000-40049/udp` for blue, `40050-40099:40050-40099/udp` for green (split ranges allow simultaneous binding during switchover)
-  - Notes: Port change from 3000 to 3001/3002 is intentionally deferred to this phase — Phase 3 uses the default port 3000 for independence. Green uses `profiles: [deploy]` so it doesn't start on regular `docker compose up -d`. Only `docker compose --profile deploy up -d app-green` starts it. Both slots use `restart: unless-stopped` so that whichever slot is active will auto-recover on crash or EC2 reboot. The `profiles` directive controls initial startup only — it does not affect restart behavior of already-running containers. The deploy script stops the old slot after switchover, so only one slot is running at steady state
+  - Notes: Port change from 3000 to 3001/3002 is intentionally deferred to this phase — Phase 3 uses the default port 3000 for independence. Green uses `profiles: [deploy]` so it doesn't start on regular `docker compose up -d`. Only `docker compose --profile deploy up -d app-green` starts it. Both slots use `restart: unless-stopped` so that whichever slot is active will auto-recover on crash or EC2 reboot. The `profiles` directive controls initial startup only — it does not affect restart behavior of already-running containers. The deploy script stops the old slot after switchover, so only one slot is running at steady state. Both slots connect to the same Supabase instance — concurrent reads and writes from both slots during the brief switchover window are safe because Postgres handles concurrent access natively (unlike the previous SQLite setup)
 
 - [ ] Task 5.2: Split mediasoup UDP port ranges for blue-green
   - File: `docker-compose.yml`
@@ -651,9 +653,16 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
       sleep 2
     done
 
-    # 5. Run database migrations on new slot (only writer — old slot still serves traffic)
-    if ! docker compose exec -T "app-$NEW" node -e "require('./dist/db').migrate()" 2>&1; then
-      echo "FATAL: database migration failed on app-$NEW"
+    # 5. Run database migrations on new slot against Supabase (old slot still serves traffic)
+    # Both slots can safely connect to Supabase concurrently — Postgres handles concurrent access.
+    # The migration uses a separate connection without statement_timeout to avoid DDL hitting the 30s limit.
+    if ! docker compose exec -T "app-$NEW" node -e "
+      import('./dist/db/connection.js').then(m => m.createDatabase()).then(async ({migrate, close}) => {
+        await migrate('./drizzle');
+        await close();
+      }).catch(e => { console.error(e); process.exit(1); })
+    " 2>&1; then
+      echo "FATAL: database migration failed on app-$NEW (Supabase)"
       docker compose stop "app-$NEW"
       exit 1
     fi
@@ -720,7 +729,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     rm -f "$NGINX_CONF.bak"
     echo "Deploy complete: app-$NEW ($IMAGE_TAG)"
     ```
-  - Notes: Active slot is determined by inspecting which container is actually running (survives reboots, no stale file). Only the target slot's image is pulled (not both). The drain step signals the old slot's connected WebSocket clients to reconnect, then polls until connections reach zero or the `DRAIN_TIMEOUT` (default 30s) expires. Migrations run explicitly on the new slot before nginx switches — the old slot still serves traffic during this window. Nginx config uses a template file with `{{UPSTREAM}}` placeholder — never raw sed on the live config. `nginx -t` validates before reload, with full rollback on failure at every step. Post-switchover verification uses Docker DNS from inside the nginx container to confirm the upstream switch worked. Requires Docker Compose V2 >= 2.20
+  - Notes: Active slot is determined by inspecting which container is actually running (survives reboots, no stale file). Only the target slot's image is pulled (not both). The drain step signals the old slot's connected WebSocket clients to reconnect, then polls until connections reach zero or the `DRAIN_TIMEOUT` (default 30s) expires. Migrations run against Supabase on the new slot before nginx switches — the old slot still serves traffic during this window. Both slots can safely connect to Supabase concurrently (Postgres handles concurrent access natively). Nginx config uses a template file with `{{UPSTREAM}}` placeholder — never raw sed on the live config. `nginx -t` validates before reload, with full rollback on failure at every step. Post-switchover verification uses Docker DNS from inside the nginx container to confirm the upstream switch worked. Requires Docker Compose V2 >= 2.20
 
 - [ ] Task 5.4: Create nginx config template for blue-green
   - File: `docker/nginx/nginx.conf.template` (new file)
@@ -754,12 +763,8 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
   - File: `server/src/index.ts` (or the migration runner entry point)
   - Action: Add a `RUN_MIGRATIONS` environment variable check (default: `false`). If `RUN_MIGRATIONS` is not explicitly set to `true`, skip all Drizzle migration execution at startup. Add corresponding `RUN_MIGRATIONS=false` to both `app-blue` and `app-green` environment blocks in `docker-compose.yml`
   - File: `scripts/deploy.sh`
-  - Action: Add an explicit migration step between health check and nginx switchover:
-    ```bash
-    # Run migrations on new slot (only writer at this point — old slot still serves traffic but new slot is not yet receiving requests via nginx)
-    docker compose exec -T "app-$NEW" node -e "require('./dist/db').migrate()"
-    ```
-  - Notes: This ensures migrations run exactly once, on exactly one container, while only one container is writing to the database. The old slot continues serving read-heavy traffic during this window. If the migration fails, the deploy script should stop the new slot and exit 1 (same as health check failure)
+  - Action: The explicit migration step between health check and nginx switchover is already defined in Task 5.3 (step 5 of the deploy script) using the ESM `import('./dist/db/connection.js')` pattern with a separate connection that has no `statement_timeout`.
+  - Notes: This ensures migrations run exactly once, on exactly one container, in a controlled sequence. While Supabase/Postgres safely handles concurrent connections from both slots, running DDL migrations from a single container prevents partial-migration states. The migration uses a separate connection without `statement_timeout` (per the Supabase migration spec) to avoid DDL operations hitting the 30-second query limit. The old slot continues serving traffic during this window. If the migration fails, the deploy script should stop the new slot and exit 1 (same as health check failure)
 
 - [ ] Task 5.8: Update nginx depends_on for blue-green
   - File: `docker-compose.yml`
@@ -799,8 +804,11 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
       --value "$(openssl rand -hex 32)" --type SecureString
     aws ssm put-parameter --name "/discord-clone/prod/GROUP_ENCRYPTION_KEY" \
       --value "<current-value-from-env>" --type SecureString
+    aws ssm put-parameter --name "/discord-clone/prod/DATABASE_URL" \
+      --value "postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres?sslmode=require" \
+      --type SecureString
     ```
-  - Notes: Migrate the existing values from the EC2 `.env` file. `GROUP_ENCRYPTION_KEY` must be preserved (changing it invalidates all encrypted messages)
+  - Notes: Migrate the existing values from the EC2 `.env` file. `GROUP_ENCRYPTION_KEY` must be preserved (changing it invalidates all encrypted messages). `DATABASE_URL` contains the Supabase connection password — it must be stored as a `SecureString`. Use Supavisor session mode (port 5432) for the long-lived Fastify server (supports transactions and prepared statements)
 
 - [ ] Task 6.2: Update deploy script to fetch secrets from SSM and pass as environment overrides
   - File: `scripts/deploy.sh`
@@ -811,10 +819,11 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     JWT_REFRESH_SECRET=$(aws ssm get-parameter --name "/discord-clone/prod/JWT_REFRESH_SECRET" --with-decryption --query "Parameter.Value" --output text)
     TURN_SECRET=$(aws ssm get-parameter --name "/discord-clone/prod/TURN_SECRET" --with-decryption --query "Parameter.Value" --output text)
     GROUP_ENCRYPTION_KEY=$(aws ssm get-parameter --name "/discord-clone/prod/GROUP_ENCRYPTION_KEY" --with-decryption --query "Parameter.Value" --output text)
+    DATABASE_URL=$(aws ssm get-parameter --name "/discord-clone/prod/DATABASE_URL" --with-decryption --query "Parameter.Value" --output text)
 
     # Pass secrets as environment overrides — Docker stores them in the container config
     # No file on disk, no env_file directive needed
-    export JWT_ACCESS_SECRET JWT_REFRESH_SECRET TURN_SECRET GROUP_ENCRYPTION_KEY
+    export JWT_ACCESS_SECRET JWT_REFRESH_SECRET TURN_SECRET GROUP_ENCRYPTION_KEY DATABASE_URL
     ```
     Update the `docker compose up` commands in the deploy script to use these exported variables. In `docker-compose.yml`, reference them in the `environment:` block of `app-blue` and `app-green`:
     ```yaml
@@ -822,6 +831,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
       - GROUP_ENCRYPTION_KEY=${GROUP_ENCRYPTION_KEY}
+      - DATABASE_URL=${DATABASE_URL}
     ```
   - Notes: EC2 instance profile needs `ssm:GetParameter` and `ssm:GetParametersByPath` permissions with `kms:Decrypt` for the SSM KMS key. This approach avoids the env_file + shred anti-pattern: secrets exist only in the deploy script's process memory and Docker's container config. Container recreation (via `docker compose up -d`) requires re-running the deploy script, which re-fetches from SSM — this is the intended behavior. Secrets are visible in `docker inspect` output on the host, which is acceptable since host access already implies root. Remove any `env_file:` directives from the compose file
 
@@ -849,7 +859,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
     # 3. Verify the app still starts correctly from SSM secrets
     bash /home/ubuntu/discord_clone/scripts/deploy.sh <current-tag>
     ```
-  - Notes: The entire purpose of the SSM migration is to eliminate plaintext secrets on disk. Leaving the old `.env` file in place defeats this goal. This task must not be skipped
+  - Notes: The entire purpose of the SSM migration is to eliminate plaintext secrets on disk. Leaving the old `.env` file in place defeats this goal — it contains `DATABASE_URL` with the Supabase password in cleartext. This task must not be skipped
 
 - [ ] Task 6.4: Switch logging to CloudWatch awslogs driver
   - File: `docker-compose.yml`
@@ -911,7 +921,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
 - [ ] Task 6.7: Create Terraform infrastructure code
   - File: `infrastructure/main.tf` (new file)
   - Action: Create Terraform config defining:
-    - `aws_security_group` with inbound rules: 443/tcp, 80/tcp, 3478/udp, 49152-49252/udp (TURN), 40000-40099/udp (mediasoup). All egress
+    - `aws_security_group` with inbound rules: 443/tcp, 80/tcp, 3478/udp, 49152-49252/udp (TURN), 40000-40099/udp (mediasoup). All egress (required for Supabase connectivity — the app connects outbound to Supabase-hosted Postgres over TLS on port 5432)
     - `aws_instance` with `ami` (Ubuntu 22.04), `instance_type` (t3.medium), `iam_instance_profile`, encrypted root volume (30GB), user_data script for Docker + Docker Compose V2 + SSM agent installation
     - `aws_iam_role` for EC2 instance with `AmazonSSMManagedInstanceCore` + CloudWatch Logs + SSM Parameter Store read permissions
     - `aws_iam_instance_profile` attaching the role
@@ -961,7 +971,7 @@ Each phase is a separate implementation story. Phases are ordered by dependency 
 
 #### Acceptance Criteria
 
-- [ ] AC 6.1: Given secrets are stored in SSM Parameter Store, when the deploy script runs, then it fetches secrets from SSM and passes them as environment overrides to `docker compose up` — no secrets file is written to disk
+- [ ] AC 6.1: Given secrets are stored in SSM Parameter Store (including `DATABASE_URL` for Supabase), when the deploy script runs, then it fetches all secrets from SSM and passes them as environment overrides to `docker compose up` — no secrets file is written to disk
 - [ ] AC 6.1.1: Given SSM-based deploys are verified working, when the legacy `.env` file is checked on EC2, then it does not exist (securely deleted after migration)
 - [ ] AC 6.2: Given the app uses `awslogs` driver, when the app writes a log line via Pino, then it appears in CloudWatch log group `/discord-clone/production/app` within 30 seconds
 - [ ] AC 6.3: Given a deploy fails, when the GitHub Actions job detects failure, then a Discord webhook notification is sent with the failure details and a link to the run
@@ -1001,39 +1011,20 @@ Phase 3          Phase 4
 **Phase 2:** Push a test tag. Verify image appears in GHCR with all three tags. Verify EC2 can `docker compose pull` the image. Test rollback by setting `IMAGE_TAG` to a previous version
 **Phase 3:** Deploy and verify: `docker network inspect backend` shows containers. Test API (`/api/health`), WebSocket (`/ws`), and voice (mediasoup RTP on UDP 40000-40099). Test that coturn TURN relay still works
 **Phase 4:** Push a test tag. Verify OIDC auth succeeds in GitHub Actions logs. Verify SSM command executes on EC2. Check CloudTrail for audit entry. Verify SSH is refused after port 22 is closed
-**Phase 5:** Deploy a known-good image. Verify drain endpoint signals WebSocket clients to reconnect and connection count reaches zero within drain window. Deploy a broken image (bad health check). Verify rollback leaves the old container active. Verify `RUN_MIGRATIONS=false` prevents auto-migration at startup. Monitor WebSocket connections during deploy
-**Phase 6:** Verify secrets load from SSM via environment overrides (check app startup logs, not the secret values; verify no `.secrets.env` file exists on disk after deploy). Verify CloudWatch log group `/discord-clone/production/app` has entries from `app-blue` stream prefix. Run `terraform plan` and verify it matches existing infrastructure. Trigger a failed deploy and verify Discord notification arrives. Check uptime monitor dashboard
+**Phase 5:** Deploy a known-good image. Verify drain endpoint signals WebSocket clients to reconnect and connection count reaches zero within drain window. Deploy a broken image (bad health check). Verify rollback leaves the old container active. Verify `RUN_MIGRATIONS=false` prevents auto-migration at startup. Verify both blue and green slots can connect to Supabase simultaneously during switchover window. Monitor WebSocket connections during deploy
+**Phase 6:** Verify secrets load from SSM via environment overrides (check app startup logs for "Database connection verified" to confirm `DATABASE_URL` works; verify no `.env` or `.secrets.env` file exists on disk after deploy). Verify CloudWatch log group `/discord-clone/production/app` has entries from `app-blue` stream prefix. Run `terraform plan` and verify it matches existing infrastructure. Trigger a failed deploy and verify Discord notification arrives. Check uptime monitor dashboard
 
 ### Notes
 
-- **Migration path for SQLite volume:** Phase 1 changes from bind mount (`./data/sqlite`) to named volume (`sqlite_data`). Data migration must be performed with all containers stopped to avoid copying a corrupted database:
+- **No local database volume needed:** The Supabase migration eliminates the `./data/sqlite` bind mount entirely. The app container is stateless — all persistent data lives in Supabase. After confirming the Supabase migration is complete and production is stable, remove the old `./data/sqlite` directory from EC2:
   ```bash
-  # 1. Stop all containers
-  docker compose down
-
-  # 2. Create the named volume
-  docker volume create sqlite_data
-
-  # 3. Copy data with read-only source mount
-  docker run --rm \
-    -v $(pwd)/data/sqlite:/src:ro \
-    -v sqlite_data:/dst \
-    alpine cp -a /src/. /dst/
-
-  # 4. Verify SQLite integrity on the copy
-  docker run --rm -v sqlite_data:/data keinos/sqlite3:latest \
-    sqlite3 /data/discord.db "PRAGMA integrity_check;"
-
-  # 5. Start with new compose config
-  docker compose up -d
-
-  # 6. Keep old bind mount directory for 7 days as backup, then remove
-  # rm -rf ./data/sqlite
+  # After verifying Supabase migration is complete and data is accessible
+  rm -rf ./data/sqlite
   ```
 - **Phase ordering follows the dependency graph:** 1→2→(3∥4)→5→6. Phases 3 and 4 may run in parallel after Phase 2. Phase 5 requires all of 2, 3, and 4. Phase 6 requires Phase 5. Do not skip phases
-- **EC2 still needs config files:** Even with registry images, the EC2 instance needs `docker-compose.yml`, `nginx.conf`, coturn config, landing page, and deploy scripts. These files are managed via git (the repo is still cloned on EC2) or could be managed via SSM documents in the future
-- **Phase 5 SQLite safety:** The deploy script is designed so that the old container is stopped before the new container receives any production traffic via nginx. During the brief window where both containers are running (health check phase), only the old container receives traffic through nginx — the new container is only accessed by the health check endpoint (`GET /api/health` which reads via `SELECT 1`). This avoids concurrent SQLite writers. Migrations are enforced by the `RUN_MIGRATIONS=false` environment variable in both app slots (Task 5.7) — the deploy script runs migrations explicitly on the new slot before nginx switchover
-- **Cost impact:** GHCR is free. SSM is free. CloudWatch Logs ~$5/month. Terraform state S3 <$1/month. S3 assets bucket <$1/month. UptimeRobot free tier. Total incremental cost: ~$6-7/month
+- **EC2 still needs config files:** Even with registry images, the EC2 instance needs `docker-compose.yml`, `nginx.conf`, coturn config, landing page, and deploy scripts. These files are managed via git (the repo is still cloned on EC2) or could be managed via SSM documents in the future. Note: the EC2 instance no longer stores any database files — all data lives in Supabase
+- **Phase 5 database safety with Supabase:** Both blue and green slots connect to the same Supabase instance. Postgres handles concurrent connections natively — there is no single-writer constraint like SQLite had. During the switchover window where both containers are running, the old slot serves production traffic while the new slot is health-checked. Both slots can safely read and write to Supabase simultaneously. Migrations are still enforced by the `RUN_MIGRATIONS=false` environment variable in both app slots (Task 5.7) — the deploy script runs DDL migrations explicitly on the new slot before nginx switchover to prevent partial-migration states. The migration uses a separate postgres.js connection without `statement_timeout` to avoid DDL operations hitting the 30-second query limit
+- **Cost impact:** GHCR is free. SSM is free. CloudWatch Logs ~$5/month. Terraform state S3 <$1/month. S3 assets bucket <$1/month. UptimeRobot free tier. Total incremental cost from this spec: ~$6-7/month. (Supabase Free tier is $0/month for up to 500 MB — separate from this spec's costs)
 
 ### Rollback Procedures
 
@@ -1069,9 +1060,9 @@ exit 1
 
 **Per-phase rollback steps:**
 
-- **Phase 1 rollback:** `git checkout deploy-phase-0 -- docker-compose.yml && docker compose down && docker compose up -d`. Verification: `docker compose ps` shows all services running. Note: if SQLite was migrated to named volume, the bind mount must be restored manually (keep old `./data/sqlite` for 7 days as documented above)
+- **Phase 1 rollback:** `git checkout deploy-phase-0 -- docker-compose.yml && docker compose down && docker compose up -d`. Verification: `docker compose ps` shows all services running. Note: database is in Supabase — no local volume rollback needed
 - **Phase 2 rollback:** `git checkout deploy-phase-1 -- docker-compose.yml .github/workflows/release.yml && docker compose down && docker compose up -d`. This restores the `build:` directive. The EC2 instance needs source code again for local builds
 - **Phase 3 rollback:** `bash scripts/rollback-config.sh deploy-phase-2`. This restores host networking, reverts nginx upstream to `127.0.0.1:3000`, and removes the bridge network. Verification: test API, WebSocket, and voice
 - **Phase 4 rollback:** Re-enable SSH key secrets in GitHub, restore `appleboy/ssh-action` steps in `release.yml`, re-open port 22 in security group. This is a manual revert — Phase 4 changes span GitHub Settings + AWS Console + workflow file
 - **Phase 5 rollback:** `bash scripts/rollback-config.sh deploy-phase-4`. This reverts to single `app` service on port 3000. Verification: `docker compose ps` shows single app instance, test API + WebSocket + voice. If Phase 5 was partially deployed (one blue-green slot running), stop both slots first: `docker compose stop app-blue app-green` before rolling back
-- **Phase 6 rollback:** Revert compose logging to `json-file`, remove SSM secret fetching from deploy script, restore `.env` from SSM backup: `aws ssm get-parameter --name "/discord-clone/prod/env-backup" --with-decryption --query "Parameter.Value" --output text > .env && chmod 600 .env`. Terraform resources (IAM, SG, etc.) can remain in AWS — they are declarative and don't affect the running application
+- **Phase 6 rollback:** Revert compose logging to `json-file`, remove SSM secret fetching from deploy script, restore `.env` from SSM backup: `aws ssm get-parameter --name "/discord-clone/prod/env-backup" --with-decryption --query "Parameter.Value" --output text > .env && chmod 600 .env`. Ensure `DATABASE_URL` is present in the restored `.env` (it must point to Supabase). Terraform resources (IAM, SG, etc.) can remain in AWS — they are declarative and don't affect the running application

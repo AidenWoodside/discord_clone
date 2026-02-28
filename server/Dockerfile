@@ -9,9 +9,14 @@ COPY package.json package-lock.json ./
 COPY server/package.json server/
 COPY shared/package.json shared/
 
-# Install ALL deps (including devDeps like typescript) for building
-# Root install first (gets typescript + shared devDeps), then workspace-specific native deps
-RUN npm ci
+# Trim workspaces to server + shared only, drop lockfile so npm resolves
+# only the ~140 needed packages instead of all ~412 (skips electron-builder etc.)
+RUN node -e "\
+  const pkg = JSON.parse(require('fs').readFileSync('package.json','utf8'));\
+  pkg.workspaces = ['server','shared'];\
+  require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));" \
+  && rm package-lock.json \
+  && npm install
 
 # Copy source and compile TypeScript
 COPY shared/src/ shared/src/

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.99.126](https://github.com/AidenWoodside/discord_clone/compare/v0.99.125...v0.99.126) (2026-02-28)
+
+
+### Bug Fixes
+
+* gracefully skip seed when database tables do not exist ([7771ab0](https://github.com/AidenWoodside/discord_clone/commit/7771ab0d1cf49fbdeac98daaf6a6896df84a820c))
+* remove dotenv, handle seed and cold-start migrations ([dbf95d8](https://github.com/AidenWoodside/discord_clone/commit/dbf95d88049535089da082e7f7d72b42982e7f96))
+* run migrations before health check on cold start ([5e7309d](https://github.com/AidenWoodside/discord_clone/commit/5e7309dbdd5e324341a294e858f1d96f9eefe690))
+
 ## [0.99.125](https://github.com/AidenWoodside/discord_clone/compare/v0.99.124...v0.99.125) (2026-02-28)
 
 

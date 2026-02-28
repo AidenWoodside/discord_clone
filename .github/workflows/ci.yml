@@ -95,6 +95,9 @@ jobs:
       - name: Test client
         run: npm test -w client
 
+      - name: Client coverage check
+        run: npm run test:coverage -w client
+
       - name: Build client
         run: npm run build -w client
 
@@ -121,6 +124,9 @@ jobs:
 
       - name: Test server
         run: npm test -w server
+
+      - name: Server coverage check
+        run: npm run test:coverage -w server
 
       - name: Build server
         run: npm run build -w server

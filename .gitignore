@@ -23,3 +23,11 @@ server/drizzle-sqlite-backup/
 .vscode/
 .idea/
 .claude/worktrees/
+
+# Deployment artifacts
+docker/nginx/nginx.conf.bak
+
+# Terraform
+infrastructure/.terraform/
+infrastructure/*.tfstate
+infrastructure/*.tfstate.backup

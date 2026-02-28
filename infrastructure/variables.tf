@@ -1,0 +1,22 @@
+variable "aws_region" {
+  description = "AWS region for all resources"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "instance_type" {
+  description = "EC2 instance type"
+  type        = string
+  default     = "t3.medium"
+}
+
+variable "ami_id" {
+  description = "Ubuntu 22.04 AMI ID (region-specific)"
+  type        = string
+}
+
+variable "github_repo" {
+  description = "GitHub repository in format owner/repo"
+  type        = string
+  default     = "AidenWoodside/discord_clone"
+}

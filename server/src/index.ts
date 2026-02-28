@@ -27,12 +27,16 @@ async function start(): Promise<void> {
 
   const app = await buildApp();
 
-  try {
-    await runMigrations(app.migrate);
-    app.log.info('Database migrations completed');
-  } catch (err) {
-    app.log.fatal({ err }, 'Migration failed — aborting startup');
-    process.exit(1);
+  if (process.env.RUN_MIGRATIONS === 'true') {
+    try {
+      await runMigrations(app.migrate);
+      app.log.info('Database migrations completed');
+    } catch (err) {
+      app.log.fatal({ err }, 'Migration failed — aborting startup');
+      process.exit(1);
+    }
+  } else {
+    app.log.info('RUN_MIGRATIONS not set — skipping migrations');
   }
 
   try {
@@ -40,6 +44,14 @@ async function start(): Promise<void> {
 
     await app.listen({ port: PORT, host: HOST });
     app.log.info(`Server listening on ${HOST}:${PORT}`);
+
+    const shutdown = async () => {
+      app.log.info('SIGTERM received, shutting down gracefully...');
+      await app.close();
+      process.exit(0);
+    };
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

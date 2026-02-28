@@ -1,0 +1,29 @@
+# Production TURN/STUN configuration for coturn
+# Used by docker-compose.yml (production deployment)
+
+listening-port=3478
+listening-ip=0.0.0.0
+min-port=49152
+max-port=49252
+
+# Domain — must match your deployment domain
+# Updated by scripts/setup.sh during initial deployment
+realm=discweeds.com
+
+# Authentication — secret is templated from SSM at deploy time
+use-auth-secret
+static-auth-secret=PLACEHOLDER_TURN_SECRET
+
+fingerprint
+no-multicast-peers
+no-cli
+
+# NAT traversal for EC2 deployment
+# external-ip must be set to the EC2 public IP / private IP pair
+# for TURN relay to work behind AWS NAT.
+# Format: external-ip=PUBLIC_IP/PRIVATE_IP
+# Example: external-ip=54.123.45.67/172.31.0.10
+# Updated by scripts/setup.sh during initial deployment
+external-ip=54.196.113.34/172.31.12.29
+
+log-file=stdout

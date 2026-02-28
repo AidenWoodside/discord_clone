@@ -10,6 +10,7 @@ import userRoutes from './plugins/users/userRoutes.js';
 import messageRoutes from './plugins/messages/messageRoutes.js';
 import adminRoutes from './plugins/admin/adminRoutes.js';
 import wsServer from './ws/wsServer.js';
+import drainPlugin from './plugins/drain.js';
 import { initMediasoup, setLogger, closeMediasoup } from './plugins/voice/mediasoupManager.js';
 import { registerVoiceHandlers } from './plugins/voice/voiceWsHandler.js';
 import { LOG_REDACT_CONFIG } from './config/logRedaction.js';
@@ -47,6 +48,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(messageRoutes, { prefix: '/api/channels' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
   await app.register(wsServer);
+  await app.register(drainPlugin);
 
   // --- Voice WS Handlers (after wsServer registers the WebSocket endpoint) ---
   registerVoiceHandlers(app.db, app.log);

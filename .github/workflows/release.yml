@@ -5,17 +5,18 @@
 # 4. Push: git push && git push --tags
 # Everything else happens automatically.
 #
-# Deployment Secrets (required for auto-deploy to EC2):
-#   EC2_SSH_KEY     — Private SSH key for EC2 access (dedicated deploy key recommended)
-#   EC2_HOST        — EC2 public IP or domain name
-#   EC2_USER        — SSH username (e.g., "ubuntu")
-#   EC2_DEPLOY_PATH — Absolute path to repo on EC2 (e.g., "/home/ubuntu/discord_clone")
+# Deployment Secrets:
+#   AWS_DEPLOY_ROLE_ARN — IAM role ARN for OIDC-federated deploy
+#   EC2_INSTANCE_ID     — Target EC2 instance ID
 
 name: Release
 
 on:
   push:
     tags: ['v*']
+
+# Deny all permissions by default — each job declares its own
+permissions: {}
 
 concurrency:
   group: release
@@ -24,6 +25,8 @@ concurrency:
 jobs:
   validate-version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -72,6 +75,46 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  build-server-image:
+    needs: [validate-version]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.9.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push server image
+        uses: docker/build-push-action@v6.14.0
+        with:
+          context: .
+          file: server/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/aidenwoodside/discord-clone-server:${{ github.sha }}
+            ghcr.io/aidenwoodside/discord-clone-server:${{ github.ref_name }}
+            ghcr.io/aidenwoodside/discord-clone-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/aidenwoodside/discord-clone-server:${{ github.sha }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
   publish-release:
     needs: [build-electron]
     if: needs.build-electron.result == 'success'
@@ -106,14 +149,26 @@ jobs:
           fi
 
   deploy-server:
-    needs: [publish-release]
+    needs: [publish-release, build-server-image]
     if: needs.publish-release.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment:
+      name: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     permissions:
+      id-token: write
       contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
 
       - name: Download release assets for landing page
         env:
@@ -151,66 +206,74 @@ jobs:
 
           ls -la downloads/
 
-      - name: Upload downloads to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "downloads/*"
-          target: "${{ secrets.EC2_DEPLOY_PATH }}/data/"
-          strip_components: 0
+      - name: Upload download assets to S3
+        run: aws s3 cp downloads/ s3://discord-clone-assets/ --recursive
 
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd "${{ secrets.EC2_DEPLOY_PATH }}"
+      - name: Sync config files via SSM
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --timeout-seconds 60 \
+            --parameters 'commands=["cd /home/ubuntu/discord_clone && git fetch origin main && git checkout origin/main -- docker-compose.yml docker/ scripts/ landing/ && aws s3 sync s3://discord-clone-assets/ data/downloads/"]' \
+            --query "Command.CommandId" --output text)
 
-            # Save current state for rollback
-            PREV_COMMIT=$(git rev-parse HEAD)
-            CURRENT_IMAGE_ID=$(sudo docker compose images app -q 2>/dev/null || echo "")
-            if [ -n "$CURRENT_IMAGE_ID" ]; then
-              sudo docker tag "$CURRENT_IMAGE_ID" app:rollback
-              echo "Saved current image for rollback: $CURRENT_IMAGE_ID"
-            fi
+          for i in $(seq 1 15); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "${{ secrets.EC2_INSTANCE_ID }}" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+            case "$STATUS" in
+              Success) echo "Config sync succeeded"; break ;;
+              Failed|TimedOut|Cancelled) echo "Config sync failed: $STATUS"; exit 1 ;;
+              *) sleep 4 ;;
+            esac
+            [ "$i" -eq 15 ] && { echo "Timed out waiting for config sync"; exit 1; }
+          done
 
-            # Deploy: discard any local changes, pull latest code, rebuild, restart
-            git checkout -- . 2>/dev/null || true
-            git clean -fd 2>/dev/null || true
-            git pull origin main || { echo "DEPLOY FAILED — git pull failed"; exit 1; }
-            sudo docker compose build app || {
-              echo "DEPLOY FAILED — docker build failed. Reverting git..."
-              git checkout "$PREV_COMMIT"
-              exit 1
-            }
-            sudo docker compose up -d app nginx
+      - name: Deploy via SSM
+        run: |
+          # Timeout budget: pull (~30s) + health check (~60s) + migration (~30s)
+          # + drain (~30s) + nginx switch (~5s) + buffer (~145s) = 300s
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --timeout-seconds 300 \
+            --parameters 'commands=["bash /home/ubuntu/discord_clone/scripts/deploy.sh ${{ github.ref_name }}"]' \
+            --query "Command.CommandId" --output text)
 
-            # Health check: 30 attempts, 2s apart = 60s timeout
-            echo "Waiting for health check..."
-            for i in $(seq 1 30); do
-              if curl -sf http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
-                echo "Deploy successful — health check passed on attempt $i"
-                sudo docker rmi app:rollback 2>/dev/null || true
-                exit 0
-              fi
-              echo "Attempt $i/30 — waiting..."
-              sleep 2
-            done
+          # Poll with structured status parsing — never grep mixed output
+          # Poll timeout (65 x 5s = 325s) slightly exceeds SSM timeout (300s)
+          # so SSM reports failure first rather than the poll giving up prematurely
+          for i in $(seq 1 65); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "${{ secrets.EC2_INSTANCE_ID }}" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
 
-            # Health check failed — rollback
-            echo "DEPLOY FAILED — health check timed out after 60s. Rolling back..."
-            git checkout "$PREV_COMMIT"
-            if sudo docker image inspect app:rollback > /dev/null 2>&1; then
-              COMPOSE_PROJECT=$(basename "$(pwd)")
-              sudo docker tag app:rollback "${COMPOSE_PROJECT}-app:latest"
-              sudo docker compose up -d --force-recreate app
-              sudo docker rmi app:rollback 2>/dev/null || true
-              echo "Rollback complete"
-            else
-              echo "No rollback image available (first deploy). Manual intervention required."
-            fi
-            exit 1
+            case "$STATUS" in
+              Success)
+                echo "Deploy succeeded"
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "${{ secrets.EC2_INSTANCE_ID }}" \
+                  --query "StandardOutputContent" --output text
+                break ;;
+              Failed|TimedOut|Cancelled)
+                echo "Deploy failed with status: $STATUS"
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "${{ secrets.EC2_INSTANCE_ID }}" \
+                  --query "StandardErrorContent" --output text
+                exit 1 ;;
+              *) sleep 5 ;;
+            esac
+            [ "$i" -eq 65 ] && { echo "Timed out waiting for SSM command"; exit 1; }
+          done
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          curl -H "Content-Type: application/json" \
+            -d '{"content": "**Deploy FAILED:** `${{ github.ref_name }}` — [View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"}' \
+            "${{ secrets.DEPLOY_WEBHOOK_URL }}"

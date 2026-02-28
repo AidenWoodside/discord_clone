@@ -119,15 +119,43 @@ if [ -f "$LANDING_HTML" ] && [ -n "$GITHUB_RELEASES_URL" ]; then
 fi
 
 # 11. Create data directories
-mkdir -p data/sqlite data/certs data/certbot-webroot
+mkdir -p data/certs data/certbot-webroot data/downloads
 echo "  data directories created"
 
-# 12. Initial certificate generation (standalone mode — no nginx needed yet)
+# 12. Initial certificate generation (webroot mode via nginx)
+# Standalone mode won't work with bridge networking (certbot has no published ports).
+# Instead, start nginx with HTTP-only config, use webroot ACME challenge, then switch to TLS.
 echo ""
 echo "Generating initial TLS certificate..."
 
-docker compose run --rm -p 80:80 certbot certonly \
-  --standalone \
+# Create a temporary HTTP-only nginx config for initial cert provisioning
+TEMP_NGINX_CONF="docker/nginx/nginx-http-only.conf"
+cat > "$TEMP_NGINX_CONF" << 'NGINX_EOF'
+server {
+    listen 80;
+    server_name _;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 200 'Setting up TLS...';
+        add_header Content-Type text/plain;
+    }
+}
+NGINX_EOF
+
+# Temporarily mount the HTTP-only config and start nginx
+docker compose run -d --name setup-nginx \
+  -v "$(pwd)/$TEMP_NGINX_CONF:/etc/nginx/conf.d/default.conf:ro" \
+  -v "$(pwd)/data/certbot-webroot:/var/www/certbot:ro" \
+  -p 80:80 \
+  nginx:1.27-alpine 2>/dev/null || true
+
+# Run certbot in webroot mode
+docker compose run --rm certbot certonly \
+  --webroot -w /var/www/certbot \
   -d "$DOMAIN" \
   --agree-tos \
   --email "$CERTBOT_EMAIL" \
@@ -135,8 +163,13 @@ docker compose run --rm -p 80:80 certbot certonly \
     echo ""
     echo "WARNING: Certificate generation failed."
     echo "Make sure DNS for $DOMAIN points to this server and port 80 is open."
-    echo "You can retry later: docker compose run --rm -p 80:80 certbot certonly --standalone -d $DOMAIN --agree-tos --email $CERTBOT_EMAIL --non-interactive"
+    echo "You can retry later with webroot mode after nginx is running."
   }
+
+# Stop temporary nginx and clean up
+docker stop setup-nginx 2>/dev/null || true
+docker rm setup-nginx 2>/dev/null || true
+rm -f "$TEMP_NGINX_CONF"
 
 echo ""
 echo "========================================"

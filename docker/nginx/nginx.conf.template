@@ -1,5 +1,5 @@
 upstream app_backend {
-    server app-blue:3001;
+    server {{UPSTREAM}};  # Managed by scripts/deploy.sh — do not edit manually
 }
 
 # Rate limiting zone for API requests

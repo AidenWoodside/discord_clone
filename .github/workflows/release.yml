@@ -314,7 +314,7 @@ jobs:
             --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
             --timeout-seconds 300 \
-            --parameters 'commands=["bash /home/ubuntu/discord_clone/scripts/deploy.sh ${{ github.ref_name }}"]' \
+            --parameters 'commands=["export HOME=/root && export PATH=$PATH:/usr/local/bin:/usr/bin && bash /home/ubuntu/discord_clone/scripts/deploy.sh ${{ github.ref_name }}"]' \
             --query "Command.CommandId" --output text)
 
           # Poll with structured status parsing — never grep mixed output

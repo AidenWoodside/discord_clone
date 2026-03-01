@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.99.139](https://github.com/AidenWoodside/discord_clone/compare/v0.99.138...v0.99.139) (2026-03-01)
+
+
+### Bug Fixes
+
+* detect crash-looping nginx and make post-switchover check fatal ([60004c3](https://github.com/AidenWoodside/discord_clone/commit/60004c33f1b1bfa32cffcf3a080a5c85521924a4))
+* detect crash-looping nginx and make post-switchover check fatal ([6f4a000](https://github.com/AidenWoodside/discord_clone/commit/6f4a000857c9343be81f23f514081dbe621453ca))
+
 ## [0.99.138](https://github.com/AidenWoodside/discord_clone/compare/v0.99.137...v0.99.138) (2026-03-01)
 
 

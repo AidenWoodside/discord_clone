@@ -10,6 +10,7 @@ import {
   setPeerTransport,
   setPeerProducer,
   setPeerVideoProducer,
+  setPeerRtpCapabilities,
   addPeerConsumer,
   removePeer,
   clearAllVoiceState,
@@ -57,21 +58,21 @@ describe('voiceService', () => {
 
   describe('joinVoiceChannel', () => {
     it('adds a peer and returns empty existing peers for first join', () => {
-      const existingPeers = joinVoiceChannel('user-1', 'channel-1', null);
+      const existingPeers = joinVoiceChannel('user-1', 'channel-1');
       expect(existingPeers).toEqual([]);
       expect(getPeer('user-1')).toBeDefined();
       expect(getPeer('user-1')!.channelId).toBe('channel-1');
     });
 
     it('returns existing peers when joining a channel with other users', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
-      const existingPeers = joinVoiceChannel('user-2', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
+      const existingPeers = joinVoiceChannel('user-2', 'channel-1');
       expect(existingPeers).toEqual(['user-1']);
     });
 
     it('leaves previous channel when joining a new one (double-join)', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
-      joinVoiceChannel('user-1', 'channel-2', null);
+      joinVoiceChannel('user-1', 'channel-1');
+      joinVoiceChannel('user-1', 'channel-2');
 
       expect(getPeer('user-1')!.channelId).toBe('channel-2');
       expect(getChannelPeers('channel-1')).toEqual([]);
@@ -80,30 +81,29 @@ describe('voiceService', () => {
 
     it('returns null when channel is at MAX_PARTICIPANTS', () => {
       for (let i = 0; i < MAX_PARTICIPANTS; i++) {
-        joinVoiceChannel(`user-${i}`, 'channel-1', null);
+        joinVoiceChannel(`user-${i}`, 'channel-1');
       }
-      const result = joinVoiceChannel('user-overflow', 'channel-1', null);
+      const result = joinVoiceChannel('user-overflow', 'channel-1');
       expect(result).toBeNull();
       expect(getPeer('user-overflow')).toBeUndefined();
     });
 
-    it('stores rtpCapabilities on join', () => {
-      const caps = { codecs: [] };
-      joinVoiceChannel('user-1', 'channel-1', caps);
-      expect(getPeer('user-1')!.rtpCapabilities).toBe(caps);
+    it('initializes rtpCapabilities to null on join', () => {
+      joinVoiceChannel('user-1', 'channel-1');
+      expect(getPeer('user-1')!.rtpCapabilities).toBeNull();
     });
   });
 
   describe('leaveVoiceChannel', () => {
     it('removes peer and returns channelId', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       const channelId = leaveVoiceChannel('user-1');
       expect(channelId).toBe('channel-1');
       expect(getPeer('user-1')).toBeUndefined();
     });
 
     it('closes transports/producers/consumers on leave', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       const transport = createMockTransport();
       const producer = createMockProducer();
       const consumer = createMockConsumer();
@@ -127,9 +127,9 @@ describe('voiceService', () => {
 
   describe('getChannelPeers', () => {
     it('returns correct user list for a channel', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
-      joinVoiceChannel('user-2', 'channel-1', null);
-      joinVoiceChannel('user-3', 'channel-2', null);
+      joinVoiceChannel('user-1', 'channel-1');
+      joinVoiceChannel('user-2', 'channel-1');
+      joinVoiceChannel('user-3', 'channel-2');
 
       const peers = getChannelPeers('channel-1');
       expect(peers).toHaveLength(2);
@@ -142,7 +142,7 @@ describe('voiceService', () => {
     });
 
     it('returns empty after all leave', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       leaveVoiceChannel('user-1');
       expect(getChannelPeers('channel-1')).toEqual([]);
     });
@@ -150,14 +150,14 @@ describe('voiceService', () => {
 
   describe('setPeerTransport', () => {
     it('stores send transport', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       const transport = createMockTransport();
       setPeerTransport('user-1', 'send', transport);
       expect(getPeer('user-1')!.sendTransport).toBe(transport);
     });
 
     it('stores recv transport', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       const transport = createMockTransport();
       setPeerTransport('user-1', 'recv', transport);
       expect(getPeer('user-1')!.recvTransport).toBe(transport);
@@ -171,7 +171,7 @@ describe('voiceService', () => {
 
   describe('setPeerProducer', () => {
     it('stores producer', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       const producer = createMockProducer();
       setPeerProducer('user-1', producer);
       expect(getPeer('user-1')!.producer).toBe(producer);
@@ -185,7 +185,7 @@ describe('voiceService', () => {
 
   describe('setPeerVideoProducer', () => {
     it('stores video producer on peer', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       const videoProducer = createMockProducer();
       setPeerVideoProducer('user-1', videoProducer);
       expect(getPeer('user-1')!.videoProducer).toBe(videoProducer);
@@ -197,14 +197,27 @@ describe('voiceService', () => {
     });
   });
 
+  describe('setPeerRtpCapabilities', () => {
+    it('stores rtpCapabilities on peer', () => {
+      joinVoiceChannel('user-1', 'channel-1');
+      const caps = { codecs: [] };
+      setPeerRtpCapabilities('user-1', caps);
+      expect(getPeer('user-1')!.rtpCapabilities).toBe(caps);
+    });
+
+    it('throws for non-existent user', () => {
+      expect(() => setPeerRtpCapabilities('nonexistent', {})).toThrow('Voice peer not found');
+    });
+  });
+
   describe('video producer lifecycle', () => {
     it('initializes videoProducer as null on join', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       expect(getPeer('user-1')!.videoProducer).toBeNull();
     });
 
     it('removePeer closes video producer', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       const videoProducer = createMockProducer();
       setPeerVideoProducer('user-1', videoProducer);
 
@@ -213,7 +226,7 @@ describe('voiceService', () => {
     });
 
     it('leaveVoiceChannel closes video producer', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       const videoProducer = createMockProducer();
       setPeerVideoProducer('user-1', videoProducer);
 
@@ -224,7 +237,7 @@ describe('voiceService', () => {
 
   describe('addPeerConsumer', () => {
     it('adds consumer to peer', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       const consumer = createMockConsumer('consumer-1');
       addPeerConsumer('user-1', consumer);
       expect(getPeer('user-1')!.consumers.get('consumer-1')).toBe(consumer);
@@ -238,7 +251,7 @@ describe('voiceService', () => {
 
   describe('removePeer', () => {
     it('fully cleans up on disconnect', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       const transport = createMockTransport();
       setPeerTransport('user-1', 'send', transport);
 
@@ -251,8 +264,8 @@ describe('voiceService', () => {
 
   describe('getAllPeers', () => {
     it('returns the internal peers map', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
-      joinVoiceChannel('user-2', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
+      joinVoiceChannel('user-2', 'channel-1');
       const peers = getAllPeers();
       expect(peers.size).toBe(2);
       expect(peers.has('user-1')).toBe(true);
@@ -262,7 +275,7 @@ describe('voiceService', () => {
 
   describe('findProducerOwner', () => {
     it('returns userId of the peer who owns the producer', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       const producer = createMockProducer();
       (producer as unknown as { id: string }).id = 'producer-abc';
       setPeerProducer('user-1', producer);
@@ -270,7 +283,7 @@ describe('voiceService', () => {
     });
 
     it('returns userId of the peer who owns the video producer', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
       const videoProducer = createMockProducer();
       (videoProducer as unknown as { id: string }).id = 'video-producer-xyz';
       setPeerVideoProducer('user-1', videoProducer);
@@ -284,8 +297,8 @@ describe('voiceService', () => {
 
   describe('clearAllVoiceState', () => {
     it('removes all peers and closes resources', () => {
-      joinVoiceChannel('user-1', 'channel-1', null);
-      joinVoiceChannel('user-2', 'channel-1', null);
+      joinVoiceChannel('user-1', 'channel-1');
+      joinVoiceChannel('user-2', 'channel-1');
       const transport = createMockTransport();
       setPeerTransport('user-1', 'send', transport);
 

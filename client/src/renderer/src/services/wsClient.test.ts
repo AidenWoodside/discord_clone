@@ -220,11 +220,13 @@ describe('wsClient', () => {
       wsClient.connect('my-token');
       mockInstances[0].triggerOpen();
 
+      // voice:presence-sync fires on connect, so our request will be the next send call
+      const sendCountBefore = mockInstances[0].send.mock.calls.length;
       const promise = wsClient.request<{ data: string }>('test:action', { key: 'value' });
 
       // Extract the sent message to get the auto-generated id
-      expect(mockInstances[0].send).toHaveBeenCalled();
-      const sentMsg = JSON.parse(mockInstances[0].send.mock.calls[0][0] as string);
+      expect(mockInstances[0].send.mock.calls.length).toBeGreaterThan(sendCountBefore);
+      const sentMsg = JSON.parse(mockInstances[0].send.mock.calls[sendCountBefore][0] as string);
       expect(sentMsg.type).toBe('test:action');
       expect(sentMsg.payload).toEqual({ key: 'value' });
       expect(sentMsg.id).toBeDefined();
@@ -242,9 +244,10 @@ describe('wsClient', () => {
       wsClient.connect('my-token');
       mockInstances[0].triggerOpen();
 
+      const sendCountBefore = mockInstances[0].send.mock.calls.length;
       const promise = wsClient.request('test:action', {});
 
-      const sentMsg = JSON.parse(mockInstances[0].send.mock.calls[0][0] as string);
+      const sentMsg = JSON.parse(mockInstances[0].send.mock.calls[sendCountBefore][0] as string);
 
       // Simulate server error response
       mockInstances[0].triggerMessage(
@@ -271,11 +274,12 @@ describe('wsClient', () => {
       wsClient.connect('my-token');
       mockInstances[0].triggerOpen();
 
+      const sendCountBefore = mockInstances[0].send.mock.calls.length;
       const promise1 = wsClient.request<{ val: number }>('action:one', {});
       const promise2 = wsClient.request<{ val: number }>('action:two', {});
 
-      const sent1 = JSON.parse(mockInstances[0].send.mock.calls[0][0] as string);
-      const sent2 = JSON.parse(mockInstances[0].send.mock.calls[1][0] as string);
+      const sent1 = JSON.parse(mockInstances[0].send.mock.calls[sendCountBefore][0] as string);
+      const sent2 = JSON.parse(mockInstances[0].send.mock.calls[sendCountBefore + 1][0] as string);
 
       // Respond to second request first
       mockInstances[0].triggerMessage(

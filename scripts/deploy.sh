@@ -19,10 +19,13 @@ GHCR_TOKEN=$(aws ssm get-parameter --name "/discord-clone/prod/GHCR_TOKEN" --wit
 echo "$GHCR_TOKEN" | docker login ghcr.io -u AidenWoodside --password-stdin
 
 # 3. Load .env vars for docker stack deploy variable substitution
-# Source first so SSM secrets (exported below) take precedence over .env values
-set -a
-source "$DEPLOY_DIR/.env"
-set +a
+# Parse .env safely — .env files aren't bash (unquoted spaces, special chars)
+while IFS= read -r line || [[ -n "$line" ]]; do
+  [[ -z "$line" || "$line" =~ ^[[:space:]]*# || ! "$line" =~ = ]] && continue
+  key="${line%%=*}"
+  value="${line#*=}"
+  export "$key=$value"
+done < "$DEPLOY_DIR/.env"
 
 # 4. Export SSM secrets (overrides .env values for these keys)
 export JWT_ACCESS_SECRET JWT_REFRESH_SECRET GROUP_ENCRYPTION_KEY DATABASE_URL

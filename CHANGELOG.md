@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.99.135](https://github.com/AidenWoodside/discord_clone/compare/v0.99.134...v0.99.135) (2026-03-01)
+
+
+### Bug Fixes
+
+* use --no-deps when starting nginx during deploy ([ba710b4](https://github.com/AidenWoodside/discord_clone/commit/ba710b4ecf7283f32b967418f0d026bfe622dd5b))
+* use --no-deps when starting nginx during deploy ([e1d0278](https://github.com/AidenWoodside/discord_clone/commit/e1d0278b5a189419d5198485535fc2b0a9d1f48b))
+
 ## [0.99.134](https://github.com/AidenWoodside/discord_clone/compare/v0.99.133...v0.99.134) (2026-03-01)
 
 

@@ -176,17 +176,14 @@ jobs:
           cache-to: type=registry,ref=ghcr.io/aidenwoodside/discord-clone-server:buildcache,mode=max
 
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.34.1
-        with:
-          image-ref: ghcr.io/aidenwoodside/discord-clone-server:${{ github.sha }}
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'
-          ignore-unfixed: true
-          skip-setup-trivy: false
-        env:
-          TRIVY_SKIP_CHECK_UPDATE: true
-          TRIVY_DISABLE_VEX_NOTICE: true
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+          trivy image \
+            --severity CRITICAL,HIGH \
+            --exit-code 1 \
+            --ignore-unfixed \
+            --format table \
+            ghcr.io/aidenwoodside/discord-clone-server:${{ github.sha }}
 
   publish-release:
     needs: [detect-changes, build-electron]

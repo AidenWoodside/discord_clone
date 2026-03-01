@@ -19,10 +19,13 @@ GHCR_TOKEN=$(aws ssm get-parameter --name "/discord-clone/prod/GHCR_TOKEN" --wit
 echo "$GHCR_TOKEN" | docker login ghcr.io -u AidenWoodside --password-stdin
 
 # 3. Load .env vars for docker stack deploy variable substitution
-# Source first so SSM secrets (exported below) take precedence over .env values
-set -a
-source "$DEPLOY_DIR/.env"
-set +a
+# Parse .env safely — .env files aren't bash (unquoted spaces, special chars)
+while IFS= read -r line || [[ -n "$line" ]]; do
+  [[ -z "$line" || "$line" =~ ^[[:space:]]*# || ! "$line" =~ = ]] && continue
+  key="${line%%=*}"
+  value="${line#*=}"
+  export "$key=$value"
+done < "$DEPLOY_DIR/.env"
 
 # 4. Export SSM secrets (overrides .env values for these keys)
 export JWT_ACCESS_SECRET JWT_REFRESH_SECRET GROUP_ENCRYPTION_KEY DATABASE_URL
@@ -100,7 +103,7 @@ docker exec "$APP_CONTAINER" node server/dist/scripts/migrate.js
 # 12. Verify app is healthy after migrations
 echo "Verifying post-migration health..."
 sleep 3
-docker exec "$APP_CONTAINER" wget --spider -q http://127.0.0.1:3001/api/health || echo "WARNING: Post-migration health check failed"
+docker exec "$APP_CONTAINER" node -e "require('http').get('http://127.0.0.1:3001/api/health',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))" || echo "WARNING: Post-migration health check failed"
 
 # 13. Prune old images (keep last 7 days)
 docker image prune -af --filter "until=168h" 2>/dev/null || true

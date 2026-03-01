@@ -29,11 +29,8 @@ services:
         published: 3001
         protocol: tcp
         mode: host
-      # mediasoup RTP — host mode bypasses Swarm ingress mesh (single-node, no routing overhead)
-      - target: 40000-40049
-        published: 40000-40049
-        protocol: udp
-        mode: host
+      # mediasoup RTP — short syntax required for port ranges (ingress mode on single-node is fine)
+      - "40000-40049:40000-40049/udp"
     stop_grace_period: 30s
     read_only: true
     tmpfs:

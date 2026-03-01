@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.99.137](https://github.com/AidenWoodside/discord_clone/compare/v0.99.136...v0.99.137) (2026-03-01)
+
+
+### Bug Fixes
+
+* force-remove crash-looping nginx before recreating ([e48d02f](https://github.com/AidenWoodside/discord_clone/commit/e48d02f55f58c6d35f67f4c81c6e6892a50b9840))
+* force-remove crash-looping nginx before starting fresh ([55dfe50](https://github.com/AidenWoodside/discord_clone/commit/55dfe50f5c542290899c4268dac89a1dc1b0da82))
+
 ## [0.99.136](https://github.com/AidenWoodside/discord_clone/compare/v0.99.135...v0.99.136) (2026-03-01)
 
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.99.136](https://github.com/AidenWoodside/discord_clone/compare/v0.99.135...v0.99.136) (2026-03-01)
+
+
+### Bug Fixes
+
+* bootstrap nginx with HTTP-only config when SSL certs are missing ([d1226dd](https://github.com/AidenWoodside/discord_clone/commit/d1226ddf90e173d8804cb21fdcb7f553b067d847))
+* bootstrap nginx with HTTP-only when SSL certs missing ([c95f7d5](https://github.com/AidenWoodside/discord_clone/commit/c95f7d5201b52ba8e7057e7db0ee4c8630977159))
+
 ## [0.99.135](https://github.com/AidenWoodside/discord_clone/compare/v0.99.134...v0.99.135) (2026-03-01)
 
 

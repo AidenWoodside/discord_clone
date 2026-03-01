@@ -16,7 +16,7 @@ test_patterns: ['Co-located tests: voiceWsHandler.test.ts alongside voiceWsHandl
 
 ## Overview
 
-### Problem Statement
+### Problem Statement 
 
 Four production bugs degrade the voice/video and auto-update experience:
 

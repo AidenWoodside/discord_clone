@@ -54,11 +54,11 @@ else
 fi
 echo "Active: $ACTIVE -> Deploying: $NEW"
 
-# 2. Pull only the target slot image
-docker compose pull "app-$NEW"
+# 2. Pull only the target slot image (quiet to avoid SSM output buffer overflow)
+docker compose pull -q "app-$NEW"
 
 # 3. Start new slot (no traffic routed yet — nginx still points at old slot)
-docker compose --profile deploy up -d "app-$NEW"
+docker compose --profile deploy up -d "app-$NEW" 2>&1 | tail -5
 
 # 3a. On cold start, run migrations before health check (tables may not exist yet)
 if [ "$ACTIVE" = "none" ]; then

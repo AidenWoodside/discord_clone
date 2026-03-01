@@ -103,7 +103,7 @@ docker exec "$APP_CONTAINER" node server/dist/scripts/migrate.js
 # 12. Verify app is healthy after migrations
 echo "Verifying post-migration health..."
 sleep 3
-docker exec "$APP_CONTAINER" wget --spider -q http://127.0.0.1:3001/api/health || echo "WARNING: Post-migration health check failed"
+docker exec "$APP_CONTAINER" node -e "require('http').get('http://127.0.0.1:3001/api/health',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))" || echo "WARNING: Post-migration health check failed"
 
 # 13. Prune old images (keep last 7 days)
 docker image prune -af --filter "until=168h" 2>/dev/null || true

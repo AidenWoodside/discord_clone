@@ -786,10 +786,25 @@ describe('useVoiceStore', () => {
       }));
     });
 
-    it('does NOT play mute sound when deafening', () => {
+    it('plays mute sound when deafening', () => {
       useVoiceStore.getState().toggleDeafen();
-      expect(playMuteSound).not.toHaveBeenCalled();
-      expect(playUnmuteSound).not.toHaveBeenCalled();
+      expect(playMuteSound).toHaveBeenCalled();
+    });
+
+    it('plays unmute sound when undeafening', () => {
+      useVoiceStore.setState({ isDeafened: true, isMuted: true });
+      useVoiceStore.getState().toggleDeafen();
+      expect(playUnmuteSound).toHaveBeenCalled();
+    });
+
+    it('plays unmute sound when undeafening back to muted state', () => {
+      useVoiceStore.setState({ isMuted: true });
+      useVoiceStore.getState().toggleDeafen(); // deafen on
+      useVoiceStore.getState().toggleDeafen(); // deafen off (restores muted=true)
+
+      expect(playMuteSound).toHaveBeenCalledTimes(1);
+      expect(playUnmuteSound).toHaveBeenCalledTimes(1);
+      expect(useVoiceStore.getState().isMuted).toBe(true);
     });
   });
 });

@@ -264,6 +264,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       wasMutedBeforeDeafen = state.isMuted;
       mediaService.deafenAudio();
       vadService.stopLocalVAD();
+      playMuteSound();
       // Clear self from speaking users
       const speakingUsers = new Set(state.speakingUsers);
       if (state.currentUserId) {
@@ -272,6 +273,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       set({ isDeafened: true, isMuted: true, speakingUsers });
     } else {
       mediaService.undeafenAudio(wasMutedBeforeDeafen);
+      playUnmuteSound();
       if (!wasMutedBeforeDeafen) {
         // Restart local VAD since mic is being unmuted
         const localStream = mediaService.getLocalStream();

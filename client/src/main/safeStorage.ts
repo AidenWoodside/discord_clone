@@ -4,7 +4,7 @@ import { join } from 'path';
 
 const STORE_PATH = join(app.getPath('userData'), 'secure-tokens.json');
 const PLAINTEXT_PREFIX = '__plain__:';
-const allowInsecureFallback = process.env.NODE_ENV !== 'production';
+const allowInsecureFallback = process.env.NODE_ENV === 'development';
 
 function getStore(): Record<string, string> {
   if (!existsSync(STORE_PATH)) return {};
@@ -26,6 +26,7 @@ export function registerSafeStorageHandlers(): void {
       const encrypted = safeStorage.encryptString(value).toString('base64');
       store[key] = encrypted;
     } else if (allowInsecureFallback) {
+      console.warn('[safeStorage] Encryption unavailable — storing plaintext. Development only.');
       const plaintext = Buffer.from(value, 'utf-8').toString('base64');
       store[key] = `${PLAINTEXT_PREFIX}${plaintext}`;
     } else {
@@ -40,8 +41,8 @@ export function registerSafeStorageHandlers(): void {
     if (!raw) return null;
 
     if (raw.startsWith(PLAINTEXT_PREFIX)) {
-      const payload = raw.slice(PLAINTEXT_PREFIX.length);
-      return Buffer.from(payload, 'base64').toString('utf-8');
+      if (!allowInsecureFallback) return null;
+      return Buffer.from(raw.slice(PLAINTEXT_PREFIX.length), 'base64').toString('utf-8');
     }
 
     if (!safeStorage.isEncryptionAvailable()) return null;

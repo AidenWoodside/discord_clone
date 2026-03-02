@@ -20,3 +20,9 @@ variable "github_repo" {
   type        = string
   default     = "AidenWoodside/discord_clone"
 }
+
+variable "assets_bucket_name" {
+  description = "S3 bucket name for download assets"
+  type        = string
+  sensitive   = true
+}

@@ -297,7 +297,7 @@ resource "aws_iam_role_policy" "deploy_s3" {
 # --- S3 Bucket for Download Assets ---
 
 resource "aws_s3_bucket" "assets" {
-  bucket = "discord-clone-assets-966917019849"
+  bucket = var.assets_bucket_name
 }
 
 resource "aws_s3_bucket_versioning" "assets" {

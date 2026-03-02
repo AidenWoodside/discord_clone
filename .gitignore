@@ -22,7 +22,8 @@ server/drizzle-sqlite-backup/
 # IDE
 .vscode/
 .idea/
-.claude/worktrees/
+.claude/
+!.claude/commands/
 
 # Deployment artifacts
 docker/nginx/nginx.conf.bak

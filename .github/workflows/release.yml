@@ -10,6 +10,7 @@
 # Deployment Secrets:
 #   AWS_DEPLOY_ROLE_ARN — IAM role ARN for OIDC-federated deploy
 #   EC2_INSTANCE_ID     — Target EC2 instance ID
+#   S3_BUCKET           — S3 bucket name for download assets
 
 name: Release
 
@@ -267,8 +268,15 @@ jobs:
 
           ls -la downloads/
 
+      - name: Validate required secrets
+        run: |
+          if [ -z "${{ secrets.S3_BUCKET }}" ]; then
+            echo "ERROR: S3_BUCKET secret is not set"
+            exit 1
+          fi
+
       - name: Upload download assets to S3
-        run: aws s3 cp downloads/ s3://discord-clone-assets-966917019849/ --recursive
+        run: aws s3 cp downloads/ s3://${{ secrets.S3_BUCKET }}/ --recursive
 
   deploy-server:
     needs: [detect-changes, build-server-image, publish-release]
@@ -304,7 +312,7 @@ jobs:
             --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
             --timeout-seconds 180 \
-            --parameters 'commands=["export HOME=/root && export PATH=$PATH:/usr/local/bin:/usr/bin:/usr/local/aws-cli/v2/current/bin && git config --global --add safe.directory /home/ubuntu/discord_clone && cd /home/ubuntu/discord_clone && git fetch origin main && git checkout origin/main -- docker-compose.yml docker-compose.coturn.yml docker/ scripts/ && aws s3 sync s3://discord-clone-assets-966917019849/ data/downloads/ && bash scripts/deploy.sh ${{ github.ref_name }}"]' \
+            --parameters 'commands=["export HOME=/root && export PATH=$PATH:/usr/local/bin:/usr/bin:/usr/local/aws-cli/v2/current/bin && git config --global --add safe.directory /home/ubuntu/discord_clone && cd /home/ubuntu/discord_clone && git fetch origin main && git checkout origin/main -- docker-compose.yml docker-compose.coturn.yml docker/ scripts/ && aws s3 sync s3://${{ secrets.S3_BUCKET }}/ data/downloads/ && bash scripts/deploy.sh ${{ github.ref_name }}"]' \
             --query "Command.CommandId" --output text)
 
           # Poll timeout (40 x 5s = 200s) slightly exceeds SSM timeout (180s)

@@ -2,7 +2,7 @@
 title: 'Scrub Git History Secrets & Parameterize AWS Account ID'
 slug: 'scrub-secrets-parameterize-aws'
 created: '2026-03-01'
-status: 'ready-for-dev'
+status: 'implementation-complete'
 stepsCompleted: [1, 2, 3, 4]
 tech_stack: ['git-filter-repo', 'github-actions', 'terraform']
 files_to_modify: ['.gitignore', '.github/workflows/release.yml', 'infrastructure/main.tf', 'infrastructure/import.sh']
@@ -72,23 +72,23 @@ Use `git filter-repo` to permanently remove secret-containing files from git his
 
 #### Task 1: Add `.claude/` to `.gitignore`
 
-- [ ] Task 1.1: Update `.gitignore` to exclude `.claude/` directory
+- [x] Task 1.1: Update `.gitignore` to exclude `.claude/` directory
   - File: `.gitignore`
   - Action: Replace `.claude/worktrees/` with `.claude/` under the IDE section. This broader exclusion covers `settings.local.json`, worktrees, and any future local config files. The `.claude/commands/` files are already committed and tracked — gitignore only affects untracked files, so they remain in the repo.
 
 #### Task 2: Parameterize AWS infrastructure secrets in GitHub Actions
 
-- [ ] Task 2.1: Replace hardcoded S3 bucket name in upload step
+- [x] Task 2.1: Replace hardcoded S3 bucket name in upload step
   - File: `.github/workflows/release.yml:L271`
   - Action: Change `s3://discord-clone-assets-966917019849/` → `s3://${{ secrets.S3_BUCKET }}/`
 
-- [ ] Task 2.2: Replace hardcoded S3 bucket name in SSM deploy step
+- [x] Task 2.2: Replace hardcoded S3 bucket name in SSM deploy step
   - File: `.github/workflows/release.yml:L307`
   - Action: Change `s3://discord-clone-assets-966917019849/` → `s3://${{ secrets.S3_BUCKET }}/`
 
 #### Task 3: Parameterize AWS infrastructure secrets in Terraform
 
-- [ ] Task 3.1: Add new variables for account ID and S3 bucket name
+- [x] Task 3.1: Add new variables for account ID and S3 bucket name
   - File: `infrastructure/variables.tf`
   - Action: Add two new variables:
     ```hcl
@@ -104,13 +104,13 @@ Use `git filter-repo` to permanently remove secret-containing files from git his
     ```
   - Notes: No defaults — these are sensitive values provided via `*.tfvars` (already gitignored)
 
-- [ ] Task 3.2: Replace hardcoded bucket name in S3 resource
+- [x] Task 3.2: Replace hardcoded bucket name in S3 resource
   - File: `infrastructure/main.tf:L300`
   - Action: Change `bucket = "discord-clone-assets-966917019849"` → `bucket = var.assets_bucket_name`
 
 #### Task 4: Parameterize `infrastructure/import.sh`
 
-- [ ] Task 4.1: Replace hardcoded IDs with environment variables
+- [x] Task 4.1: Replace hardcoded IDs with environment variables
   - File: `infrastructure/import.sh`
   - Action: Add environment variable requirements at top of script and replace hardcoded values:
     ```bash

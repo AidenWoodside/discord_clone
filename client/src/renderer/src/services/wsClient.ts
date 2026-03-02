@@ -65,7 +65,7 @@ class WsClient {
       this.markPendingMessagesFailed();
       this.cleanupVoiceOnDisconnect();
 
-      if (this.intentionalClose || event.code === 4001 || event.code === 4003) {
+      if (this.intentionalClose || event.code === 4003) {
         usePresenceStore.getState().setConnectionState('disconnected');
         return;
       }
@@ -430,7 +430,7 @@ class WsClient {
         ws.onclose = (event: CloseEvent) => {
           this.socket = null;
           this.cleanupVoiceOnDisconnect();
-          if (this.intentionalClose || event.code === 4001) {
+          if (this.intentionalClose || event.code === 4003) {
             usePresenceStore.getState().setConnectionState('disconnected');
             return;
           }

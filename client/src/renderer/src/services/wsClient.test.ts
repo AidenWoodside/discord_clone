@@ -198,13 +198,13 @@ describe('wsClient', () => {
       expect(mockInstances).toHaveLength(1);
     });
 
-    it('should not reconnect on auth failure (4001)', () => {
+    it('should attempt reconnect on auth failure (4001)', () => {
       wsClient.connect('my-token');
       mockInstances[0].triggerOpen();
 
       mockInstances[0].triggerClose(4001);
 
-      expect(usePresenceStore.getState().connectionState).toBe('disconnected');
+      expect(usePresenceStore.getState().connectionState).toBe('reconnecting');
     });
   });
 

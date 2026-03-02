@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.99.144](https://github.com/AidenWoodside/discord_clone/compare/v0.99.143...v0.99.144) (2026-03-02)
+
+
+### Bug Fixes
+
+* clean repo for public use ([637e514](https://github.com/AidenWoodside/discord_clone/commit/637e514c8d56a59eb970c280f03e1bbe8900d8b1))
+* parameterize hardcoded AWS secrets and update .gitignore ([ad50e5a](https://github.com/AidenWoodside/discord_clone/commit/ad50e5a05fb06c0de1eb8358a54bcc301c2e3aa5))
+
 ## [0.99.143](https://github.com/AidenWoodside/discord_clone/compare/v0.99.142...v0.99.143) (2026-03-01)
 
 

@@ -2,7 +2,7 @@
 # Coturn runs separately: docker compose -f docker-compose.coturn.yml up -d
 services:
   app:
-    image: ghcr.io/aidenwoodside/discord-clone-server:${IMAGE_TAG:-latest}
+    image: ghcr.io/dickweeds/discord-clone-server:${IMAGE_TAG:-latest}
     env_file: .env
     environment:
       - PORT=3001

@@ -33,7 +33,7 @@ linux:
         - x64
 publish:
   provider: github
-  owner: AidenWoodside
+  owner: dickweeds
   repo: discord_clone
 protocols:
   - name: "Discord Clone Invite"

@@ -175,11 +175,11 @@ jobs:
           file: server/Dockerfile
           push: true
           tags: |
-            ghcr.io/aidenwoodside/discord-clone-server:${{ github.sha }}
-            ghcr.io/aidenwoodside/discord-clone-server:${{ github.ref_name }}
-            ghcr.io/aidenwoodside/discord-clone-server:latest
-          cache-from: type=registry,ref=ghcr.io/aidenwoodside/discord-clone-server:buildcache
-          cache-to: type=registry,ref=ghcr.io/aidenwoodside/discord-clone-server:buildcache,mode=max
+            ghcr.io/dickweeds/discord-clone-server:${{ github.sha }}
+            ghcr.io/dickweeds/discord-clone-server:${{ github.ref_name }}
+            ghcr.io/dickweeds/discord-clone-server:latest
+          cache-from: type=registry,ref=ghcr.io/dickweeds/discord-clone-server:buildcache
+          cache-to: type=registry,ref=ghcr.io/dickweeds/discord-clone-server:buildcache,mode=max
 
   publish-release:
     needs: [detect-changes, build-electron]
@@ -203,15 +203,15 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           # Find draft releases for this tag and publish them
-          RELEASE_IDS=$(gh api repos/AidenWoodside/discord_clone/releases --jq "[.[] | select(.tag_name==\"$TAG\") | .id] | .[]")
+          RELEASE_IDS=$(gh api repos/${{ github.repository }}/releases --jq "[.[] | select(.tag_name==\"$TAG\") | .id] | .[]")
           if [ -n "$RELEASE_IDS" ]; then
             echo "$RELEASE_IDS" | while read -r ID; do
-              gh api --method PATCH "repos/AidenWoodside/discord_clone/releases/$ID" -f draft=false
+              gh api --method PATCH "repos/${{ github.repository }}/releases/$ID" -f draft=false
               echo "Published release $TAG (ID: $ID)"
             done
           else
             # Check if a published release already exists
-            PUBLISHED=$(gh api repos/AidenWoodside/discord_clone/releases/tags/$TAG --jq '.id' 2>/dev/null || echo "")
+            PUBLISHED=$(gh api repos/${{ github.repository }}/releases/tags/$TAG --jq '.id' 2>/dev/null || echo "")
             if [ -n "$PUBLISHED" ]; then
               echo "Release $TAG is already published"
             else

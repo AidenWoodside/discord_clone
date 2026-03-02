@@ -1,8 +1,7 @@
 import type { UserContextMenuContext, UserContextMenuDependencies, UserContextMenuItem } from '../types';
 
 function isOwnerTargetingAnotherUser(context: UserContextMenuContext): boolean {
-  const isPrivileged = context.currentUserRole === 'owner' || context.currentUserRole === 'admin';
-  return isPrivileged && context.currentUserId !== context.targetUserId;
+  return context.currentUserRole === 'owner' && context.currentUserId !== context.targetUserId;
 }
 
 export function getAdminMenuItems(

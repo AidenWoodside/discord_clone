@@ -1,7 +1,7 @@
 import React from 'react';
 
 export type UserContextMenuSurface = 'voice' | 'member-online' | 'member-offline';
-export type UserRole = 'owner' | 'admin' | 'user' | null;
+export type UserRole = 'owner' | 'user' | null;
 
 export interface UserContextMenuContext {
   targetUserId: string;

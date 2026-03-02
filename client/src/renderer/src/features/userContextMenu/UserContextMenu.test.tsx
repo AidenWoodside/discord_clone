@@ -20,7 +20,7 @@ vi.mock('../../services/apiClient', () => ({
   configureApiClient: vi.fn(),
 }));
 
-function renderMenu(role: 'owner' | 'admin' | 'user', currentUserId: string, targetUserId: string, surface: 'voice' | 'member-online' | 'member-offline') {
+function renderMenu(role: 'owner' | 'user', currentUserId: string, targetUserId: string, surface: 'voice' | 'member-online' | 'member-offline') {
   useAuthStore.setState({
     user: { id: currentUserId, username: 'current', role },
     accessToken: 'token',
@@ -96,17 +96,6 @@ describe('UserContextMenu', () => {
 
     expect(screen.queryByText('User Volume')).not.toBeInTheDocument();
     expect(screen.getByText('No actions available')).toBeInTheDocument();
-  });
-
-  it('shows admin actions for admin role targeting another user', async () => {
-    renderMenu('admin', 'admin-id', 'user-id', 'member-online');
-    const user = userEvent.setup();
-
-    await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId('target-user') });
-
-    expect(screen.getByText('Kick')).toBeInTheDocument();
-    expect(screen.getByText('Ban')).toBeInTheDocument();
-    expect(screen.getByText('Reset Password')).toBeInTheDocument();
   });
 
   it('updates peer volume via slider', async () => {

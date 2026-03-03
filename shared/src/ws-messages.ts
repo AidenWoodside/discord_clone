@@ -71,6 +71,7 @@ export interface VoiceProducePayload {
   transportId: string;
   kind: 'audio' | 'video';
   rtpParameters: unknown;
+  source?: AudioProducerSource;
 }
 
 export interface VoiceProduceResponse {
@@ -96,7 +97,10 @@ export interface VoiceNewProducerPayload {
   producerId: string;
   peerId: string;
   kind: 'audio' | 'video';
+  source?: AudioProducerSource;
 }
+
+export type AudioProducerSource = 'microphone' | 'soundboard';
 
 export interface VoiceProducerClosedPayload {
   producerId: string;
@@ -197,4 +201,17 @@ export const WS_TYPES = {
   USER_BANNED: 'user:banned',
   MEMBER_ADDED: 'member:added',
   MEMBER_REMOVED: 'member:removed',
+  SOUNDBOARD_PLAY: 'soundboard:play',
+  SOUNDBOARD_STOP: 'soundboard:stop',
 } as const;
+
+// Soundboard
+export interface SoundboardPlayPayload {
+  userId: string;
+  soundId: string;
+  soundName: string;
+}
+
+export interface SoundboardStopPayload {
+  userId: string;
+}

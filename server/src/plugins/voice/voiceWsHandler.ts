@@ -21,6 +21,7 @@ import {
   setPeerTransport,
   setPeerProducer,
   setPeerVideoProducer,
+  setPeerSoundboardProducer,
   setPeerRtpCapabilities,
   addPeerConsumer,
   removePeer,
@@ -55,6 +56,8 @@ export function registerVoiceHandlers(appDb: AppDatabase, logger: FastifyBaseLog
   registerHandler(WS_TYPES.VOICE_STATE, handleVoiceState);
   registerHandler(WS_TYPES.VOICE_PRESENCE_SYNC, handleVoicePresenceSync);
   registerHandler(WS_TYPES.VOICE_SET_RTP_CAPABILITIES, handleSetRtpCapabilities);
+  registerHandler(WS_TYPES.SOUNDBOARD_PLAY, handleSoundboardPlay);
+  registerHandler(WS_TYPES.SOUNDBOARD_STOP, handleSoundboardStop);
 }
 
 async function handleVoiceJoin(ws: WebSocket, message: WsMessage, userId: string): Promise<void> {
@@ -106,10 +109,20 @@ async function handleVoiceJoin(ws: WebSocket, message: WsMessage, userId: string
       try {
         ws.send(JSON.stringify({
           type: WS_TYPES.VOICE_NEW_PRODUCER,
-          payload: { producerId: existingPeer.producer.id, peerId, kind: 'audio' },
+          payload: { producerId: existingPeer.producer.id, peerId, kind: 'audio', source: 'microphone' },
         }));
       } catch {
         log.debug({ userId, peerId }, 'Failed to send existing audio producer');
+      }
+    }
+    if (existingPeer.soundboardProducer) {
+      try {
+        ws.send(JSON.stringify({
+          type: WS_TYPES.VOICE_NEW_PRODUCER,
+          payload: { producerId: existingPeer.soundboardProducer.id, peerId, kind: 'audio', source: 'soundboard' },
+        }));
+      } catch {
+        log.debug({ userId, peerId }, 'Failed to send existing soundboard producer');
       }
     }
     if (existingPeer.videoProducer) {
@@ -219,12 +232,14 @@ async function handleConnectTransport(ws: WebSocket, message: WsMessage, userId:
 }
 
 async function handleProduce(ws: WebSocket, message: WsMessage, userId: string): Promise<void> {
-  const { transportId, kind, rtpParameters } = message.payload as {
+  const { transportId, kind, rtpParameters, source } = message.payload as {
     transportId: string;
     kind: 'audio' | 'video';
     rtpParameters: unknown;
+    source?: 'microphone' | 'soundboard';
   };
   const requestId = message.id;
+  const audioSource = source || 'microphone';
 
   const peer = getPeer(userId);
   if (!peer || !peer.sendTransport) {
@@ -237,13 +252,15 @@ async function handleProduce(ws: WebSocket, message: WsMessage, userId: string):
     return;
   }
 
-  // Reject duplicate audio producer
-  if (kind === 'audio' && peer.producer) {
+  // Reject duplicate producers
+  if (kind === 'audio' && audioSource === 'microphone' && peer.producer) {
     if (requestId) respondError(ws, requestId, 'Already has an active audio producer');
     return;
   }
-
-  // Reject duplicate video producer
+  if (kind === 'audio' && audioSource === 'soundboard' && peer.soundboardProducer) {
+    if (requestId) respondError(ws, requestId, 'Already has an active soundboard producer');
+    return;
+  }
   if (kind === 'video' && peer.videoProducer) {
     if (requestId) respondError(ws, requestId, 'Already has an active video producer');
     return;
@@ -257,6 +274,8 @@ async function handleProduce(ws: WebSocket, message: WsMessage, userId: string):
 
     if (kind === 'video') {
       setPeerVideoProducer(userId, producer);
+    } else if (audioSource === 'soundboard') {
+      setPeerSoundboardProducer(userId, producer);
     } else {
       setPeerProducer(userId, producer);
     }
@@ -274,6 +293,7 @@ async function handleProduce(ws: WebSocket, message: WsMessage, userId: string):
       producerId: producer.id,
       peerId: userId,
       kind,
+      source: kind === 'audio' ? audioSource : undefined,
     });
   } catch (err) {
     log.error({ userId, err: (err as Error).message }, 'Failed to produce');
@@ -421,6 +441,27 @@ function handleSetRtpCapabilities(ws: WebSocket, message: WsMessage, userId: str
 
   setPeerRtpCapabilities(userId, rtpCapabilities);
   if (requestId) respond(ws, requestId, {});
+}
+
+function handleSoundboardPlay(_ws: WebSocket, message: WsMessage, userId: string): void {
+  const { soundId, soundName } = message.payload as { soundId: string; soundName: string };
+  const peer = getPeer(userId);
+  if (!peer) return;
+
+  broadcastToChannel(peer.channelId, userId, WS_TYPES.SOUNDBOARD_PLAY, {
+    userId,
+    soundId,
+    soundName,
+  });
+}
+
+function handleSoundboardStop(_ws: WebSocket, _message: WsMessage, userId: string): void {
+  const peer = getPeer(userId);
+  if (!peer) return;
+
+  broadcastToChannel(peer.channelId, userId, WS_TYPES.SOUNDBOARD_STOP, {
+    userId,
+  });
 }
 
 function broadcastToServer(excludeUserId: string, type: string, payload: unknown): void {

@@ -26,3 +26,9 @@ variable "assets_bucket_name" {
   type        = string
   sensitive   = true
 }
+
+variable "soundboard_bucket_name" {
+  description = "S3 bucket name for soundboard audio storage"
+  type        = string
+  sensitive   = true
+}

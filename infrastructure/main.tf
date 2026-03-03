@@ -210,6 +210,28 @@ resource "aws_iam_role_policy" "ec2_s3_assets" {
   })
 }
 
+resource "aws_iam_role_policy" "ec2_s3_soundboard" {
+  name = "s3-soundboard-readwrite"
+  role = aws_iam_role.ec2.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket"
+      ]
+      Resource = [
+        aws_s3_bucket.soundboard.arn,
+        "${aws_s3_bucket.soundboard.arn}/*"
+      ]
+    }]
+  })
+}
+
 resource "aws_iam_instance_profile" "ec2" {
   name = "discord-clone-ec2"
   role = aws_iam_role.ec2.name
@@ -323,5 +345,44 @@ resource "aws_s3_bucket_lifecycle_configuration" "assets" {
     noncurrent_version_expiration {
       noncurrent_days = 30
     }
+  }
+}
+
+# --- S3 Bucket for Soundboard Audio ---
+
+resource "aws_s3_bucket" "soundboard" {
+  bucket = var.soundboard_bucket_name
+}
+
+resource "aws_s3_bucket_versioning" "soundboard" {
+  bucket = aws_s3_bucket.soundboard.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "soundboard" {
+  bucket = aws_s3_bucket.soundboard.id
+
+  rule {
+    id     = "cleanup-noncurrent-versions"
+    status = "Enabled"
+
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+}
+
+resource "aws_s3_bucket_cors_configuration" "soundboard" {
+  bucket = aws_s3_bucket.soundboard.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["PUT", "GET"]
+    allowed_origins = ["*"]
+    max_age_seconds = 3600
   }
 }

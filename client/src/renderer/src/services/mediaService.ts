@@ -5,6 +5,7 @@ import type {
   VoiceConnectTransportPayload,
   VoiceProducePayload,
   VoiceProduceResponse,
+  AudioProducerSource,
 } from 'discord-clone-shared';
 
 let device: Device | null = null;
@@ -15,10 +16,17 @@ let localStream: MediaStream | null = null;
 let videoProducer: types.Producer | null = null;
 let localVideoStream: MediaStream | null = null;
 let currentOutputDeviceId = '';
+
+// Soundboard
+let soundboardProducer: types.Producer | null = null;
+let soundboardAudioContext: AudioContext | null = null;
+let soundboardSource: AudioBufferSourceNode | null = null;
+let soundboardDestination: MediaStreamAudioDestinationNode | null = null;
 export interface AudioConsumerEntry {
   consumer: types.Consumer;
   audio: HTMLAudioElement;
   peerId: string;
+  source: AudioProducerSource;
   gainNode?: GainNode;
   audioContext?: AudioContext;
 }
@@ -75,15 +83,17 @@ export function createSendTransport(
   sendTransport.on(
     'produce',
     (
-      { kind, rtpParameters }: { kind: types.MediaKind; rtpParameters: types.RtpParameters },
+      { kind, rtpParameters, appData }: { kind: types.MediaKind; rtpParameters: types.RtpParameters; appData: Record<string, unknown> },
       callback: (arg: { id: string }) => void,
       errback: (error: Error) => void,
     ) => {
+      const source = (appData?.source as AudioProducerSource) || undefined;
       wsClient
         .request<VoiceProduceResponse>('voice:produce', {
           transportId: sendTransport!.id,
           kind: kind as 'audio' | 'video',
           rtpParameters,
+          source,
         } satisfies VoiceProducePayload)
         .then(({ producerId }) => callback({ id: producerId }))
         .catch((err: Error) => errback(err));
@@ -148,6 +158,7 @@ export async function consumeAudio(
   params: { consumerId: string; producerId: string; kind: 'audio'; rtpParameters: types.RtpParameters },
   peerId: string,
   initialVolumeScalar = 1,
+  source: AudioProducerSource = 'microphone',
 ): Promise<types.Consumer> {
   const consumer = await transport.consume({
     id: params.consumerId,
@@ -196,7 +207,7 @@ export async function consumeAudio(
   }
   await audio.play();
 
-  consumers.set(consumer.id, { consumer, audio, peerId, gainNode, audioContext });
+  consumers.set(consumer.id, { consumer, audio, peerId, source, gainNode, audioContext });
 
   return consumer;
 }
@@ -382,6 +393,74 @@ export function setPeerVolume(peerId: string, volumeScalar: number): void {
   }
 }
 
+// --- Soundboard ---
+
+export async function produceSoundboardAudio(transport: types.Transport): Promise<types.Producer> {
+  soundboardAudioContext = new AudioContext();
+  soundboardDestination = soundboardAudioContext.createMediaStreamDestination();
+
+  // Play a brief silent buffer to initialize the stream with a valid track
+  const silentBuffer = soundboardAudioContext.createBuffer(1, soundboardAudioContext.sampleRate * 0.1, soundboardAudioContext.sampleRate);
+  const silentSource = soundboardAudioContext.createBufferSource();
+  silentSource.buffer = silentBuffer;
+  silentSource.connect(soundboardDestination);
+  silentSource.start();
+
+  const track = soundboardDestination.stream.getAudioTracks()[0];
+  const newProducer = await transport.produce({
+    track,
+    appData: { source: 'soundboard' as AudioProducerSource },
+  });
+  soundboardProducer = newProducer;
+  return newProducer;
+}
+
+export function playSoundboardAudio(audioBuffer: AudioBuffer): void {
+  if (!soundboardAudioContext || !soundboardDestination) return;
+
+  // Stop any currently playing source
+  if (soundboardSource) {
+    try { soundboardSource.stop(); } catch { /* already stopped */ }
+  }
+
+  soundboardSource = soundboardAudioContext.createBufferSource();
+  soundboardSource.buffer = audioBuffer;
+  soundboardSource.connect(soundboardDestination);
+  soundboardSource.start();
+}
+
+export function stopSoundboardAudio(): void {
+  if (soundboardSource) {
+    try { soundboardSource.stop(); } catch { /* already stopped */ }
+    soundboardSource = null;
+  }
+}
+
+export function getSoundboardAudioContext(): AudioContext | null {
+  return soundboardAudioContext;
+}
+
+export function isSoundboardPlaying(): boolean {
+  return soundboardSource !== null;
+}
+
+export function onSoundboardEnded(callback: () => void): void {
+  if (soundboardSource) {
+    soundboardSource.onended = () => {
+      soundboardSource = null;
+      callback();
+    };
+  }
+}
+
+export function muteSoundboardConsumer(peerId: string, muted: boolean): void {
+  for (const [, entry] of consumers) {
+    if (entry.peerId === peerId && entry.source === 'soundboard') {
+      entry.audio.muted = muted;
+    }
+  }
+}
+
 export function removeConsumerByProducerId(producerId: string): void {
   for (const [consumerId, entry] of consumers) {
     if (entry.consumer.producerId === producerId) {
@@ -408,6 +487,21 @@ export function cleanup(): void {
   if (videoProducer) {
     videoProducer.close();
     videoProducer = null;
+  }
+
+  // Close soundboard producer and audio context
+  if (soundboardSource) {
+    try { soundboardSource.stop(); } catch { /* already stopped */ }
+    soundboardSource = null;
+  }
+  if (soundboardProducer) {
+    soundboardProducer.close();
+    soundboardProducer = null;
+  }
+  soundboardDestination = null;
+  if (soundboardAudioContext) {
+    soundboardAudioContext.close().catch(() => Promise.resolve());
+    soundboardAudioContext = null;
   }
 
   // Stop local media tracks

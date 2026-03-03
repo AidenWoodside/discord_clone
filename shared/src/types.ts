@@ -93,3 +93,15 @@ export interface AuthTokens {
 
 /** Base64-encoded sealed box containing the group encryption key encrypted for a specific user */
 export type EncryptedGroupKeyBlob = string;
+
+export interface SoundResponse {
+  id: string;
+  name: string;
+  s3Key: string;
+  fileSize: number;
+  durationMs: number;
+  mimeType: string;
+  uploadedBy: string;
+  uploadedByUsername: string;
+  createdAt: string;
+}

@@ -9,16 +9,18 @@ interface EmojiPickerProps {
 
 export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps): React.ReactNode {
   const containerRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        onClose();
+        onCloseRef.current();
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [onClose]);
+  }, []);
 
   return (
     <div

@@ -147,6 +147,12 @@ export interface ChannelDeletedPayload {
 }
 
 // Reactions
+export interface ReactionSummary {
+  emoji: string;
+  count: number;
+  userIds: string[];
+}
+
 export interface ReactionAddPayload {
   messageId: string;
   channelId: string;

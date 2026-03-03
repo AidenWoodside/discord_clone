@@ -504,6 +504,30 @@ describe('ContentArea', () => {
     expect(screen.queryByText('Loading messages...')).not.toBeInTheDocument();
   });
 
+  it('renders reaction pills when messages have reactions', async () => {
+    useMessageStore.setState({
+      messages: new Map([
+        ['ch-1', [
+          { id: 'msg-1', channelId: 'ch-1', authorId: 'user-1', content: 'Hello', createdAt: '2024-01-01T12:00:00Z', status: 'sent' as const },
+        ]],
+      ]),
+      reactions: new Map([
+        ['msg-1', [{ emoji: '\u2764\uFE0F', count: 2, userIds: ['user-1', 'user-2'] }]],
+      ]),
+    });
+
+    renderContentArea('ch-1');
+
+    await waitFor(() => {
+      // Heart emoji only appears in reaction pills (not in the quick-react toolbar)
+      const hearts = screen.getAllByText('\u2764\uFE0F');
+      // One in quick-react toolbar, one in reaction pill
+      expect(hearts.length).toBeGreaterThanOrEqual(2);
+      // The count "2" comes from the reaction pill
+      expect(screen.getByText('2')).toBeInTheDocument();
+    });
+  });
+
   describe('loading older messages', () => {
     it('shows loading spinner when isLoadingMore is true', async () => {
       useMessageStore.setState({

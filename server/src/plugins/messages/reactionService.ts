@@ -1,6 +1,9 @@
 import { eq, and, inArray } from 'drizzle-orm';
+import type { ReactionSummary } from 'discord-clone-shared';
 import { messageReactions } from '../../db/schema.js';
 import type { AppDatabase } from '../../db/connection.js';
+
+export type { ReactionSummary };
 
 export interface ReactionResult {
   id: string;
@@ -8,12 +11,6 @@ export interface ReactionResult {
   userId: string;
   emoji: string;
   createdAt: string;
-}
-
-export interface ReactionSummary {
-  emoji: string;
-  count: number;
-  userIds: string[];
 }
 
 export async function addReaction(

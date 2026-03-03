@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import useMessageStore from '../../stores/useMessageStore';
 import useAuthStore from '../../stores/useAuthStore';
+import { useMemberStore } from '../../stores/useMemberStore';
 import { ReactionPills } from './ReactionPills';
 
 vi.mock('../../services/reactionService', () => ({
@@ -25,6 +26,16 @@ beforeEach(() => {
   useAuthStore.setState({
     user: { id: 'current-user', username: 'testuser' },
   } as Parameters<typeof useAuthStore.setState>[0]);
+  useMemberStore.setState({
+    members: [
+      { id: 'current-user', username: 'testuser', role: 'user', createdAt: '2024-01-01T00:00:00Z' },
+      { id: 'u1', username: 'alice', role: 'user', createdAt: '2024-01-01T00:00:00Z' },
+      { id: 'u2', username: 'bob', role: 'user', createdAt: '2024-01-01T00:00:00Z' },
+      { id: 'u3', username: 'charlie', role: 'user', createdAt: '2024-01-01T00:00:00Z' },
+    ],
+    isLoading: false,
+    error: null,
+  });
   vi.clearAllMocks();
 });
 

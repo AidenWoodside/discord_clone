@@ -319,15 +319,23 @@ class WsClient {
       }
     } else if (message.type === WS_TYPES.REACTION_ADDED) {
       const payload = message.payload as ReactionAddedPayload;
-      import('../stores/useMessageStore').then(({ default: useMessageStore }) => {
-        useMessageStore.getState().addReaction(payload.messageId, payload.userId, payload.emoji);
+      import('../stores/useAuthStore').then(({ default: useAuthStore }) => {
+        const currentUserId = useAuthStore.getState().user?.id;
+        if (payload.userId === currentUserId) return; // Already applied optimistically
+        import('../stores/useMessageStore').then(({ default: useMessageStore }) => {
+          useMessageStore.getState().addReaction(payload.messageId, payload.userId, payload.emoji);
+        });
       }).catch((err) => {
         console.warn('[wsClient] Failed to add reaction:', err);
       });
     } else if (message.type === WS_TYPES.REACTION_REMOVED) {
       const payload = message.payload as ReactionRemovedPayload;
-      import('../stores/useMessageStore').then(({ default: useMessageStore }) => {
-        useMessageStore.getState().removeReaction(payload.messageId, payload.userId, payload.emoji);
+      import('../stores/useAuthStore').then(({ default: useAuthStore }) => {
+        const currentUserId = useAuthStore.getState().user?.id;
+        if (payload.userId === currentUserId) return; // Already applied optimistically
+        import('../stores/useMessageStore').then(({ default: useMessageStore }) => {
+          useMessageStore.getState().removeReaction(payload.messageId, payload.userId, payload.emoji);
+        });
       }).catch((err) => {
         console.warn('[wsClient] Failed to remove reaction:', err);
       });

@@ -345,6 +345,23 @@ describe('messageWsHandler', () => {
       expect(sent.payload.error).toBe('MISSING_MESSAGE_ID');
     });
 
+    it('reaction:add returns error on emoji exceeding 32 chars', () => {
+      const ws = createMockSocket();
+      clients.set(userId, ws);
+
+      const raw = JSON.stringify({
+        type: 'reaction:add',
+        payload: { messageId, channelId, emoji: 'a'.repeat(33) },
+      });
+
+      routeMessage(ws, raw, userId, mockLog);
+
+      expect(ws.send).toHaveBeenCalledOnce();
+      const sent = JSON.parse((ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
+      expect(sent.type).toBe('text:error');
+      expect(sent.payload.error).toBe('EMOJI_TOO_LONG');
+    });
+
     it('reaction:add returns error on missing emoji', () => {
       const ws = createMockSocket();
       clients.set(userId, ws);
@@ -409,6 +426,23 @@ describe('messageWsHandler', () => {
       await new Promise(r => setTimeout(r, 100));
 
       expect(ws.send).not.toHaveBeenCalled();
+    });
+
+    it('reaction:remove returns error on emoji exceeding 32 chars', () => {
+      const ws = createMockSocket();
+      clients.set(userId, ws);
+
+      const raw = JSON.stringify({
+        type: 'reaction:remove',
+        payload: { messageId, channelId, emoji: 'x'.repeat(33) },
+      });
+
+      routeMessage(ws, raw, userId, mockLog);
+
+      expect(ws.send).toHaveBeenCalledOnce();
+      const sent = JSON.parse((ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
+      expect(sent.type).toBe('text:error');
+      expect(sent.payload.error).toBe('EMOJI_TOO_LONG');
     });
 
     it('reaction:remove returns error on missing fields', () => {

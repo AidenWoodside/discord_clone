@@ -1,11 +1,7 @@
 import { create } from 'zustand';
-import type { TextReceivePayload } from 'discord-clone-shared';
+import type { TextReceivePayload, ReactionSummary } from 'discord-clone-shared';
 
-export interface ReactionSummary {
-  emoji: string;
-  count: number;
-  userIds: string[];
-}
+export type { ReactionSummary };
 
 export interface DecryptedMessage {
   id: string;

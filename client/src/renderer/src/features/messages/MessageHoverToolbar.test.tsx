@@ -39,7 +39,7 @@ describe('MessageHoverToolbar', () => {
 
   it('has hidden class for hover visibility', () => {
     const { container } = render(<MessageHoverToolbar messageId="msg-1" channelId="ch-1" />);
-    expect(container.firstChild).toHaveClass('hidden');
-    expect(container.firstChild).toHaveClass('group-hover/msg:flex');
+    const toolbar = container.querySelector('.hidden.group-hover\\/msg\\:flex');
+    expect(toolbar).toBeInTheDocument();
   });
 });

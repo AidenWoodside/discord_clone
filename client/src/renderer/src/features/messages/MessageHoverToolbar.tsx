@@ -21,10 +21,10 @@ export function MessageHoverToolbar({ messageId, channelId }: MessageHoverToolba
   const [showPicker, setShowPicker] = useState(false);
 
   return (
-    <div className="hidden group-hover/msg:flex absolute -top-4 right-2 gap-0.5 rounded-md bg-bg-secondary border border-border-default shadow-md p-0.5 z-10">
-      {QUICK_REACTIONS.map(({ emoji, name }) => (
-        <Tooltip.Provider key={emoji} delayDuration={300}>
-          <Tooltip.Root>
+    <Tooltip.Provider delayDuration={300}>
+      <div className="hidden group-hover/msg:flex absolute -top-4 right-2 gap-0.5 rounded-md bg-bg-secondary border border-border-default shadow-md p-0.5 z-10">
+        {QUICK_REACTIONS.map(({ emoji, name }) => (
+          <Tooltip.Root key={emoji}>
             <Tooltip.Trigger asChild>
               <button
                 type="button"
@@ -44,27 +44,27 @@ export function MessageHoverToolbar({ messageId, channelId }: MessageHoverToolba
               </Tooltip.Content>
             </Tooltip.Portal>
           </Tooltip.Root>
-        </Tooltip.Provider>
-      ))}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setShowPicker(!showPicker)}
-          className="w-7 h-7 flex items-center justify-center rounded text-sm text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"
-          aria-label="More reactions"
-        >
-          +
-        </button>
-        {showPicker && (
-          <EmojiPicker
-            onSelect={(emoji) => {
-              toggleReaction(messageId, channelId, emoji);
-              setShowPicker(false);
-            }}
-            onClose={() => setShowPicker(false)}
-          />
-        )}
+        ))}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowPicker(!showPicker)}
+            className="w-7 h-7 flex items-center justify-center rounded text-sm text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"
+            aria-label="More reactions"
+          >
+            +
+          </button>
+          {showPicker && (
+            <EmojiPicker
+              onSelect={(emoji) => {
+                toggleReaction(messageId, channelId, emoji);
+                setShowPicker(false);
+              }}
+              onClose={() => setShowPicker(false)}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </Tooltip.Provider>
   );
 }

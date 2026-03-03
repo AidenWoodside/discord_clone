@@ -105,6 +105,10 @@ export function registerMessageHandlers(
       sendTextError(ws, 'MISSING_EMOJI', '');
       return;
     }
+    if (payload.emoji.length > 32) {
+      sendTextError(ws, 'EMOJI_TOO_LONG', '');
+      return;
+    }
 
     try {
       await withDbRetry(() => addReaction(db, {
@@ -154,6 +158,10 @@ export function registerMessageHandlers(
     }
     if (!payload.emoji || typeof payload.emoji !== 'string') {
       sendTextError(ws, 'MISSING_EMOJI', '');
+      return;
+    }
+    if (payload.emoji.length > 32) {
+      sendTextError(ws, 'EMOJI_TOO_LONG', '');
       return;
     }
 

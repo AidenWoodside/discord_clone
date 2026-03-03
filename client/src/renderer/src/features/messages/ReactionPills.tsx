@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import useMessageStore from '../../stores/useMessageStore';
 import type { ReactionSummary } from '../../stores/useMessageStore';
 import useAuthStore from '../../stores/useAuthStore';
+import { useMemberStore } from '../../stores/useMemberStore';
 import { toggleReaction } from '../../services/reactionService';
 import { Tooltip } from 'radix-ui';
 import { EmojiPicker } from './EmojiPicker';
@@ -16,17 +17,18 @@ const EMPTY_REACTIONS: ReactionSummary[] = [];
 export function ReactionPills({ messageId, channelId }: ReactionPillsProps): React.ReactNode {
   const reactions = useMessageStore((s) => s.reactions.get(messageId) ?? EMPTY_REACTIONS);
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const members = useMemberStore((s) => s.members);
   const [showPicker, setShowPicker] = useState(false);
 
   if (reactions.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap gap-1 mt-1 items-center">
-      {reactions.map((reaction) => {
-        const hasReacted = currentUserId ? reaction.userIds.includes(currentUserId) : false;
-        return (
-          <Tooltip.Provider key={reaction.emoji} delayDuration={300}>
-            <Tooltip.Root>
+    <Tooltip.Provider delayDuration={300}>
+      <div className="flex flex-wrap gap-1 mt-1 items-center">
+        {reactions.map((reaction) => {
+          const hasReacted = currentUserId ? reaction.userIds.includes(currentUserId) : false;
+          return (
+            <Tooltip.Root key={reaction.emoji}>
               <Tooltip.Trigger asChild>
                 <button
                   type="button"
@@ -46,35 +48,41 @@ export function ReactionPills({ messageId, channelId }: ReactionPillsProps): Rea
                   className="bg-bg-floating text-text-primary text-xs rounded px-2 py-1 shadow-lg border border-border-default"
                   sideOffset={5}
                 >
-                  {reaction.userIds.length <= 3
-                    ? reaction.userIds.join(', ')
-                    : `${reaction.userIds.slice(0, 3).join(', ')} and ${reaction.userIds.length - 3} more`}
+                  {(() => {
+                    const names = reaction.userIds.map((uid) => {
+                      const member = members.find((m) => m.id === uid);
+                      return member?.username ?? uid.slice(0, 8);
+                    });
+                    return names.length <= 3
+                      ? names.join(', ')
+                      : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
+                  })()}
                   <Tooltip.Arrow className="fill-bg-floating" />
                 </Tooltip.Content>
               </Tooltip.Portal>
             </Tooltip.Root>
-          </Tooltip.Provider>
-        );
-      })}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setShowPicker(!showPicker)}
-          className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs border border-border-default bg-bg-tertiary hover:bg-bg-hover text-text-muted"
-          aria-label="Add reaction"
-        >
-          +
-        </button>
-        {showPicker && (
-          <EmojiPicker
-            onSelect={(emoji) => {
-              toggleReaction(messageId, channelId, emoji);
-              setShowPicker(false);
-            }}
-            onClose={() => setShowPicker(false)}
-          />
-        )}
+          );
+        })}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowPicker(!showPicker)}
+            className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs border border-border-default bg-bg-tertiary hover:bg-bg-hover text-text-muted"
+            aria-label="Add reaction"
+          >
+            +
+          </button>
+          {showPicker && (
+            <EmojiPicker
+              onSelect={(emoji) => {
+                toggleReaction(messageId, channelId, emoji);
+                setShowPicker(false);
+              }}
+              onClose={() => setShowPicker(false)}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </Tooltip.Provider>
   );
 }

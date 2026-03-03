@@ -1,9 +1,8 @@
 import { create } from 'zustand';
 import type { SoundResponse } from 'discord-clone-shared';
-import { WS_TYPES, SOUNDBOARD_MAX_DURATION_S } from 'discord-clone-shared';
+import { SOUNDBOARD_MAX_DURATION_S } from 'discord-clone-shared';
 import * as soundboardApi from '../services/soundboardApi';
 import * as mediaService from '../services/mediaService';
-import { wsClient } from '../services/wsClient';
 
 const MUTED_USERS_STORAGE_KEY = 'soundboardMutedUsers';
 
@@ -83,7 +82,6 @@ export const useSoundboardStore = create<SoundboardState>((set, get) => ({
       await get().loadSounds();
     } catch (err) {
       set({ error: (err as Error).message });
-      throw err;
     }
   },
 
@@ -139,10 +137,7 @@ export const useSoundboardStore = create<SoundboardState>((set, get) => ({
       mediaService.playSoundboardAudio(audioBuffer, () => {
         set({ isPlaying: false, currentSoundId: null });
         try {
-          wsClient.send({
-            type: WS_TYPES.SOUNDBOARD_STOP,
-            payload: {},
-          });
+          soundboardApi.notifySoundStopped();
         } catch {
           // WS not connected — non-critical
         }
@@ -151,10 +146,7 @@ export const useSoundboardStore = create<SoundboardState>((set, get) => ({
 
       // Send play notification
       try {
-        wsClient.send({
-          type: WS_TYPES.SOUNDBOARD_PLAY,
-          payload: { soundId, soundName: sound.name },
-        });
+        soundboardApi.notifySoundPlaying(soundId);
       } catch {
         // WS not connected — non-critical
       }
@@ -168,10 +160,7 @@ export const useSoundboardStore = create<SoundboardState>((set, get) => ({
     mediaService.stopSoundboardAudio();
     set({ isPlaying: false, currentSoundId: null });
     try {
-      wsClient.send({
-        type: WS_TYPES.SOUNDBOARD_STOP,
-        payload: {},
-      });
+      soundboardApi.notifySoundStopped();
     } catch {
       // WS not connected — non-critical
     }

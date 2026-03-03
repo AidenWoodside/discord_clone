@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { FastifyBaseLogger } from 'fastify';
 import { sounds, users } from '../../db/schema.js';
@@ -28,7 +28,7 @@ function getExtensionFromMime(mimeType: string): string {
   return map[mimeType] || 'bin';
 }
 
-export async function getAllSounds(db: AppDatabase, limit = 200) {
+export async function getAllSounds(db: AppDatabase) {
   const rows = await db
     .select({
       id: sounds.id,
@@ -43,7 +43,7 @@ export async function getAllSounds(db: AppDatabase, limit = 200) {
     })
     .from(sounds)
     .innerJoin(users, eq(sounds.uploaded_by, users.id))
-    .limit(limit);
+    .orderBy(desc(sounds.created_at));
 
   return rows;
 }

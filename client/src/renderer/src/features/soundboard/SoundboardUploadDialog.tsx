@@ -56,12 +56,14 @@ export function SoundboardUploadDialog({ onClose }: SoundboardUploadDialogProps)
     setIsUploading(true);
     setError(null);
 
-    try {
-      await uploadSound(file, name.trim(), durationMs);
-      onClose();
-    } catch (err) {
-      setError((err as Error).message);
+    await uploadSound(file, name.trim(), durationMs);
+
+    // Check if upload succeeded (no error in store)
+    const storeError = useSoundboardStore.getState().error;
+    if (storeError) {
       setIsUploading(false);
+    } else {
+      onClose();
     }
   }
 

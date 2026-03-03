@@ -208,7 +208,6 @@ export const WS_TYPES = {
 // Soundboard — send (client → server) vs broadcast (server → clients)
 export interface SoundboardPlaySendPayload {
   soundId: string;
-  soundName: string;
 }
 
 export interface SoundboardPlayBroadcastPayload {

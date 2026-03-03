@@ -49,8 +49,8 @@ describe('SoundboardPanel', () => {
   it('renders sound names from store', () => {
     useSoundboardStore.setState({
       sounds: [
-        { id: 's1', name: 'Boing', durationMs: 1000, uploadedBy: 'user-1', uploadedByUsername: 'alice', s3Key: 'k1', createdAt: '2024-01-01' },
-        { id: 's2', name: 'Honk', durationMs: 2000, uploadedBy: 'user-2', uploadedByUsername: 'bob', s3Key: 'k2', createdAt: '2024-01-02' },
+        { id: 's1', name: 'Boing', durationMs: 1000, uploadedBy: 'user-1', uploadedByUsername: 'alice', createdAt: '2024-01-01' },
+        { id: 's2', name: 'Honk', durationMs: 2000, uploadedBy: 'user-2', uploadedByUsername: 'bob', createdAt: '2024-01-02' },
       ],
     });
 
@@ -85,7 +85,7 @@ describe('SoundboardPanel', () => {
   it('play button calls playSound with correct soundId', async () => {
     useSoundboardStore.setState({
       sounds: [
-        { id: 's1', name: 'Boing', durationMs: 1000, uploadedBy: 'user-1', uploadedByUsername: 'alice', s3Key: 'k1', createdAt: '2024-01-01' },
+        { id: 's1', name: 'Boing', durationMs: 1000, uploadedBy: 'user-1', uploadedByUsername: 'alice', createdAt: '2024-01-01' },
       ],
     });
 
@@ -104,7 +104,7 @@ describe('SoundboardPanel', () => {
 
     useSoundboardStore.setState({
       sounds: [
-        { id: 's1', name: 'Boing', durationMs: 1000, uploadedBy: 'user-1', uploadedByUsername: 'alice', s3Key: 'k1', createdAt: '2024-01-01' },
+        { id: 's1', name: 'Boing', durationMs: 1000, uploadedBy: 'user-1', uploadedByUsername: 'alice', createdAt: '2024-01-01' },
       ],
     });
 

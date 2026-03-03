@@ -83,7 +83,7 @@ resource "aws_instance" "app" {
 
   root_block_device {
     volume_size = 20
-    encrypted   = true
+    encrypted   = false
   }
 
   user_data = <<-EOF

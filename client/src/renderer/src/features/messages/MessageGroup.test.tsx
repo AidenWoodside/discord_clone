@@ -1,8 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { useMemberStore } from '../../stores/useMemberStore';
+import useMessageStore from '../../stores/useMessageStore';
 import { MessageGroup } from './MessageGroup';
 import type { MessageGroupData } from '../../utils/groupMessages';
+
+vi.mock('../../services/reactionService', () => ({
+  toggleReaction: vi.fn(),
+}));
 
 beforeEach(() => {
   useMemberStore.setState({
@@ -12,6 +17,17 @@ beforeEach(() => {
     ],
     isLoading: false,
     error: null,
+  });
+  useMessageStore.setState({
+    messages: new Map(),
+    reactions: new Map(),
+    hasMoreMessages: new Map(),
+    cursors: new Map(),
+    isLoadingMore: false,
+    currentChannelId: null,
+    isLoading: false,
+    error: null,
+    sendError: null,
   });
 });
 
@@ -117,5 +133,17 @@ describe('MessageGroup', () => {
     const avatar = container.querySelector('[aria-hidden="true"]');
     expect(avatar).toBeInTheDocument();
     expect(avatar).toHaveTextContent('A');
+  });
+
+  it('each message div has group/msg class for hover scoping', () => {
+    const { container } = render(<MessageGroup group={makeGroup()} isFirst={true} />);
+    const messageDiv = container.querySelector('.group\\/msg');
+    expect(messageDiv).toBeInTheDocument();
+  });
+
+  it('renders hover toolbar with hidden class by default', () => {
+    const { container } = render(<MessageGroup group={makeGroup()} isFirst={true} />);
+    const toolbar = container.querySelector('.hidden.group-hover\\/msg\\:flex');
+    expect(toolbar).toBeInTheDocument();
   });
 });

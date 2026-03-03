@@ -44,6 +44,10 @@ export type {
   UserBannedPayload,
   MemberAddedPayload,
   MemberRemovedPayload,
+  ReactionAddPayload,
+  ReactionRemovePayload,
+  ReactionAddedPayload,
+  ReactionRemovedPayload,
 } from './ws-messages.js';
 
 export { WS_TYPES } from './ws-messages.js';

@@ -2,7 +2,7 @@
 title: 'Message Reactions'
 slug: 'message-reactions'
 created: '2026-03-02'
-status: 'ready-for-dev'
+status: 'implementation-complete'
 stepsCompleted: [1, 2, 3, 4]
 tech_stack: ['TypeScript 5.x', 'React 18+', 'Fastify v5.7.x', 'Drizzle ORM v0.45.x', 'Zustand v5.0.x', 'Radix UI (radix-ui v1.4.3)', 'Tailwind CSS v4.2', 'Vitest', '@emoji-mart/react', '@emoji-mart/data']
 files_to_modify: ['server/src/db/schema.ts', 'shared/src/ws-messages.ts', 'shared/src/index.ts', 'server/src/plugins/messages/messageWsHandler.ts', 'server/src/plugins/messages/messageRoutes.ts', 'client/src/renderer/src/services/wsClient.ts', 'client/src/renderer/src/features/messages/MessageGroup.tsx', 'client/src/renderer/src/stores/useMessageStore.ts']
@@ -99,7 +99,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
 
 ### Tasks
 
-- [ ] Task 1: Add shared reaction types and WS constants
+- [x] Task 1: Add shared reaction types and WS constants
   - File: `shared/src/ws-messages.ts`
   - Action: Add to `WS_TYPES` object: `REACTION_ADD: 'reaction:add'`, `REACTION_REMOVE: 'reaction:remove'`, `REACTION_ADDED: 'reaction:added'`, `REACTION_REMOVED: 'reaction:removed'`. Add payload interfaces:
     - `ReactionAddPayload { messageId: string; channelId: string; emoji: string; }` (client → server)
@@ -109,7 +109,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
   - File: `shared/src/index.ts`
   - Action: Add `export type { ReactionAddPayload, ReactionRemovePayload, ReactionAddedPayload, ReactionRemovedPayload }` to the ws-messages re-export block. Add `REACTION_ADD`, `REACTION_REMOVE`, `REACTION_ADDED`, `REACTION_REMOVED` is automatic since `WS_TYPES` is already exported as a value.
 
-- [ ] Task 2: Add `message_reactions` database table
+- [x] Task 2: Add `message_reactions` database table
   - File: `server/src/db/schema.ts`
   - Action: Add `messageReactions` table with columns:
     - `id`: `uuid('id').primaryKey().defaultRandom()`
@@ -122,7 +122,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
   - Action: Export `type MessageReaction = InferSelectModel<typeof messageReactions>` and `type NewMessageReaction = InferInsertModel<typeof messageReactions>`
   - Notes: Import `uniqueIndex` from `drizzle-orm/pg-core` alongside existing imports
 
-- [ ] Task 3: Create reaction service with DB operations
+- [x] Task 3: Create reaction service with DB operations
   - File: `server/src/plugins/messages/reactionService.ts` (new)
   - Action: Create service with three exported functions:
     - `addReaction(db: AppDatabase, params: { messageId: string; userId: string; emoji: string }): Promise<{ id: string; messageId: string; userId: string; emoji: string; createdAt: string }>` — `db.insert(messageReactions).values({...}).returning()`, map `created_at` → ISO string. On unique constraint violation (duplicate reaction), silently return the existing reaction (query it via select)
@@ -130,7 +130,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
     - `getReactionsForMessages(db: AppDatabase, messageIds: string[]): Promise<Map<string, { emoji: string; count: number; userIds: string[] }[]>>` — Single query: `db.select().from(messageReactions).where(inArray(messageReactions.message_id, messageIds))`, then aggregate in JS: group by `message_id` → group by `emoji` → `{ emoji, count, userIds[] }`. Return a `Map<messageId, ReactionSummary[]>`
   - Notes: Import `eq`, `and`, `inArray` from `drizzle-orm`. Follow the same `AppDatabase` first-param pattern as `messageService.ts`
 
-- [ ] Task 4: Create reaction service tests
+- [x] Task 4: Create reaction service tests
   - File: `server/src/plugins/messages/reactionService.test.ts` (new)
   - Action: Test all three service functions against PGlite:
     - `addReaction`: stores reaction, returns correct shape with ISO `createdAt`. Adding same reaction twice returns existing (idempotent)
@@ -138,7 +138,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
     - `getReactionsForMessages`: returns grouped summaries, correct counts, correct userIds, empty map for no reactions, multiple messages in single call, multiple emojis per message
   - Notes: Follow `messageService.test.ts` pattern — `vi.hoisted` env setup, `setupApp/teardownApp/truncateAll`, seed channel + user + messages in `beforeEach`
 
-- [ ] Task 5: Add reaction WS handlers
+- [x] Task 5: Add reaction WS handlers
   - File: `server/src/plugins/messages/messageWsHandler.ts`
   - Action: Import `ReactionAddPayload`, `ReactionRemovePayload`, `ReactionAddedPayload`, `ReactionRemovedPayload` from `discord-clone-shared`. Import `addReaction`, `removeReaction` from `./reactionService.js`. Add two new `registerHandler` calls inside `registerMessageHandlers()`:
     - `registerHandler(WS_TYPES.REACTION_ADD, async (ws, message, userId) => {...})`:
@@ -155,7 +155,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
       4. If not found (`false`): no-op (don't broadcast, don't error)
   - Notes: Reuse existing `sendTextError` helper for validation errors. Follow exact broadcast loop pattern from `text:send` handler
 
-- [ ] Task 6: Add reaction WS handler tests
+- [x] Task 6: Add reaction WS handler tests
   - File: `server/src/plugins/messages/messageWsHandler.test.ts` (extend existing)
   - Action: Add a new `describe('reaction handlers', ...)` block with tests:
     - `reaction:add` — stores reaction in DB, broadcasts `reaction:added` to all clients with correct payload shape
@@ -166,7 +166,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
     - `reaction:remove` — missing fields returns error
   - Notes: Follow existing test pattern — `createMockSocket`, `routeMessage`, `waitForCall`. Seed a message in `beforeEach` to react to
 
-- [ ] Task 7: Extend REST message fetch to include reactions
+- [x] Task 7: Extend REST message fetch to include reactions
   - File: `server/src/plugins/messages/messageRoutes.ts`
   - Action: In the `GET /:channelId/messages` handler, after fetching messages:
     1. Import `getReactionsForMessages` from `./reactionService.js`
@@ -176,7 +176,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
   - Action: Update the JSON schema `response[200]` to include `reactions` array in each message object: `reactions: { type: 'array', items: { type: 'object', properties: { emoji: { type: 'string' }, count: { type: 'integer' }, userIds: { type: 'array', items: { type: 'string' } } } } }`
   - Notes: Single additional DB query for all messages in the page — no N+1
 
-- [ ] Task 8: Add REST reaction route tests
+- [x] Task 8: Add REST reaction route tests
   - File: `server/src/plugins/messages/messageRoutes.test.ts` (extend existing)
   - Action: Add tests to verify reactions are included in message fetch:
     - Message with no reactions returns empty `reactions: []`
@@ -184,12 +184,12 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
     - Multiple emojis on same message are all returned
     - Reactions from multiple users show correct count and all userIds
 
-- [ ] Task 9: Install emoji-mart in client
+- [x] Task 9: Install emoji-mart in client
   - File: `client/package.json`
   - Action: `cd client && npm install @emoji-mart/react @emoji-mart/data`
   - Notes: These are runtime dependencies, not devDependencies
 
-- [ ] Task 10: Extend message store with reaction state
+- [x] Task 10: Extend message store with reaction state
   - File: `client/src/renderer/src/stores/useMessageStore.ts`
   - Action: Add to state interface:
     - `reactions: Map<string, { emoji: string; count: number; userIds: string[] }[]>` — keyed by messageId
@@ -200,7 +200,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
   - Action: Initialize `reactions: new Map()` in initial state
   - Notes: All Map mutations via `new Map(get().reactions)` for immutability. When `setMessages` is called (channel switch), clear reactions for that channel's messages or let them accumulate (accumulate is simpler, stale entries are harmless)
 
-- [ ] Task 11: Add message store reaction tests
+- [x] Task 11: Add message store reaction tests
   - File: `client/src/renderer/src/stores/useMessageStore.test.ts` (extend existing)
   - Action: Add tests for new reaction actions:
     - `setReactionsForMessages` merges reaction data
@@ -211,7 +211,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
     - `removeReaction` removes entry when count reaches 0
     - `removeReaction` is no-op for non-existent reaction
 
-- [ ] Task 12: Create client reaction service
+- [x] Task 12: Create client reaction service
   - File: `client/src/renderer/src/services/reactionService.ts` (new)
   - Action: Export `toggleReaction(messageId: string, channelId: string, emoji: string): void`:
     1. Get `userId` from `useAuthStore.getState().user.id`
@@ -221,7 +221,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
     5. If not reacted: optimistic `addReaction(messageId, userId, emoji)` in store, send `wsClient.send({ type: WS_TYPES.REACTION_ADD, payload: { messageId, channelId, emoji } })`
   - Notes: Follow `messageService.ts` pattern — access stores via `getState()`, call `wsClient.send()`
 
-- [ ] Task 13: Add wsClient reaction event handling
+- [x] Task 13: Add wsClient reaction event handling
   - File: `client/src/renderer/src/services/wsClient.ts`
   - Action: In `handleMessage()`, add two new `else if` branches after the existing `text:error` handler:
     - `else if (message.type === WS_TYPES.REACTION_ADDED)`: extract `ReactionAddedPayload`, call `useMessageStore.getState().addReaction(payload.messageId, payload.userId, payload.emoji)`. Use dynamic import like `text:receive` handler does: `const { default: useMessageStore } = await import('../stores/useMessageStore')`
@@ -229,7 +229,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
   - Action: Import `ReactionAddedPayload`, `ReactionRemovedPayload` types from `discord-clone-shared`
   - Notes: Dynamic imports maintain the existing pattern of lazy-loading stores to avoid circular dependencies
 
-- [ ] Task 14: Update message fetch to store reactions
+- [x] Task 14: Update message fetch to store reactions
   - File: `client/src/renderer/src/services/messageService.ts`
   - Action: In `fetchMessages()` and `fetchOlderMessages()`, after decrypting messages:
     1. Extract reactions from the API response: each message in `result.data` now has a `reactions` field
@@ -237,7 +237,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
     3. Call `useMessageStore.getState().setReactionsForMessages(reactionsMap)`
   - Notes: The REST response now includes `reactions` per message (from Task 7). Type the response to include `reactions` field alongside existing `TextReceivePayload` fields
 
-- [ ] Task 15: Create ReactionPills component
+- [x] Task 15: Create ReactionPills component
   - File: `client/src/renderer/src/features/messages/ReactionPills.tsx` (new)
   - Action: Create component that renders reaction pills below a message:
     - Props: `{ messageId: string; channelId: string }`
@@ -250,7 +250,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
     - Render a "+" button at the end to open the emoji picker (same as hover toolbar "more" button behavior)
   - Notes: Use `Tooltip` component to show who reacted on hover (list first 3 usernames + "and N more")
 
-- [ ] Task 16: Create ReactionPills tests
+- [x] Task 16: Create ReactionPills tests
   - File: `client/src/renderer/src/features/messages/ReactionPills.test.tsx` (new)
   - Action: Test:
     - Renders nothing when no reactions exist
@@ -260,7 +260,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
     - Shows "+" button to add reaction
     - Tooltip shows reactor usernames on hover
 
-- [ ] Task 17: Create EmojiPicker component
+- [x] Task 17: Create EmojiPicker component
   - File: `client/src/renderer/src/features/messages/EmojiPicker.tsx` (new)
   - Action: Create wrapper around emoji-mart:
     - Props: `{ onSelect: (emoji: string) => void; onClose: () => void }`
@@ -270,7 +270,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
     - Apply emoji-mart custom CSS overrides to match the warm earthy theme (override `--em-color-border`, `--em-color-border-over`, `--em-rgb-background` etc.)
   - Notes: emoji-mart exposes CSS custom properties for theming. The `emoji.native` field gives the Unicode character
 
-- [ ] Task 18: Create MessageHoverToolbar component
+- [x] Task 18: Create MessageHoverToolbar component
   - File: `client/src/renderer/src/features/messages/MessageHoverToolbar.tsx` (new)
   - Action: Create toolbar that appears on message hover:
     - Props: `{ messageId: string; channelId: string }`
@@ -282,7 +282,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
     - Styling: `flex gap-0.5 rounded-md bg-bg-secondary border border-border-default shadow-md p-0.5` with `text-text-muted hover:text-text-primary hover:bg-bg-hover` on each button
   - Notes: Use `Popover` from `radix-ui` for the emoji picker dropdown, not `DropdownMenu` (picker is custom content, not a menu)
 
-- [ ] Task 19: Create MessageHoverToolbar tests
+- [x] Task 19: Create MessageHoverToolbar tests
   - File: `client/src/renderer/src/features/messages/MessageHoverToolbar.test.tsx` (new)
   - Action: Test:
     - Renders quick-react emoji buttons
@@ -291,7 +291,7 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
     - Calls `toggleReaction` on picker emoji selection
     - Closes picker after selection
 
-- [ ] Task 20: Integrate hover toolbar and reaction pills into MessageGroup
+- [x] Task 20: Integrate hover toolbar and reaction pills into MessageGroup
   - File: `client/src/renderer/src/features/messages/MessageGroup.tsx`
   - Action: For each message `<div key={msg.id}>` in the messages map:
     1. Wrap in a `relative` container with `group/msg` class (Tailwind group modifier for scoping hover): `<div key={msg.id} className="relative group/msg mt-1">`
@@ -300,32 +300,32 @@ Add Discord-style emoji reactions to text channel messages. A hover toolbar on e
   - Action: Import `MessageHoverToolbar` and `ReactionPills` components
   - Notes: The `group/msg` Tailwind syntax creates a named group so hover only applies to the specific message, not the entire MessageGroup. The toolbar uses `absolute` positioning to float above the message without affecting layout
 
-- [ ] Task 21: Update MessageGroup tests
+- [x] Task 21: Update MessageGroup tests
   - File: `client/src/renderer/src/features/messages/MessageGroup.test.tsx` (extend existing)
   - Action: Add tests:
     - Each message renders a `ReactionPills` component
     - Hover toolbar is hidden by default (has `hidden` class)
     - Verify message div has `group/msg` class for hover scoping
 
-- [ ] Task 22: Update ContentArea to pass reactions from fetch
+- [x] Task 22: Update ContentArea to pass reactions from fetch
   - File: `client/src/renderer/src/features/layout/ContentArea.tsx`
   - Action: No changes needed — `fetchMessages` and `fetchOlderMessages` in `messageService.ts` already write to the store (Task 14). `ReactionPills` reads directly from `useMessageStore`. `ContentArea` doesn't need to thread reaction props.
   - Notes: This is a verification task — confirm no changes needed in ContentArea
 
 ### Acceptance Criteria
 
-- [ ] AC 1: Given a user hovers over a message, when the cursor enters the message area, then a toolbar with 6 quick-react emojis (👍 ❤️ 😂 😮 😢 🔥) and a "+" button appears above-right of the message
-- [ ] AC 2: Given a user clicks a quick-react emoji in the toolbar, when the click fires, then the reaction is added to the message (pill appears below message with emoji + count "1") and other connected clients see the reaction in real-time
-- [ ] AC 3: Given a user clicks the "+" button in the hover toolbar, when the click fires, then a full emoji picker (emoji-mart) opens in a popover
-- [ ] AC 4: Given a user selects an emoji from the full picker, when the selection fires, then the reaction is added to the message, the picker closes, and other clients see it in real-time
-- [ ] AC 5: Given a message has reactions, when a user views the message, then reaction pills are displayed below the message body showing each unique emoji + count
-- [ ] AC 6: Given a user has reacted with a specific emoji, when they view the reaction pill, then that pill is visually highlighted (accent border + tinted background) to indicate their reaction
-- [ ] AC 7: Given a user clicks a reaction pill for an emoji they already reacted with, when the click fires, then their reaction is removed (count decrements, pill disappears if count reaches 0) and other clients see the removal in real-time
-- [ ] AC 8: Given a user clicks a reaction pill for an emoji they have NOT reacted with, when the click fires, then their reaction is added (count increments) and other clients see it in real-time
-- [ ] AC 9: Given a message has reactions and the user loads the channel via REST, when the messages load, then existing reactions are displayed correctly with counts and user highlighting
-- [ ] AC 10: Given the same user tries to add the same emoji reaction twice to the same message, when the second add fires, then the operation is idempotent — no duplicate, no error
-- [ ] AC 11: Given a user tries to remove a reaction that doesn't exist, when the remove fires, then nothing happens — no error, no broadcast
-- [ ] AC 12: Given a message is deleted (cascade), when the message is removed from DB, then all associated reactions are also deleted (FK cascade)
+- [x] AC 1: Given a user hovers over a message, when the cursor enters the message area, then a toolbar with 6 quick-react emojis (👍 ❤️ 😂 😮 😢 🔥) and a "+" button appears above-right of the message
+- [x] AC 2: Given a user clicks a quick-react emoji in the toolbar, when the click fires, then the reaction is added to the message (pill appears below message with emoji + count "1") and other connected clients see the reaction in real-time
+- [x] AC 3: Given a user clicks the "+" button in the hover toolbar, when the click fires, then a full emoji picker (emoji-mart) opens in a popover
+- [x] AC 4: Given a user selects an emoji from the full picker, when the selection fires, then the reaction is added to the message, the picker closes, and other clients see it in real-time
+- [x] AC 5: Given a message has reactions, when a user views the message, then reaction pills are displayed below the message body showing each unique emoji + count
+- [x] AC 6: Given a user has reacted with a specific emoji, when they view the reaction pill, then that pill is visually highlighted (accent border + tinted background) to indicate their reaction
+- [x] AC 7: Given a user clicks a reaction pill for an emoji they already reacted with, when the click fires, then their reaction is removed (count decrements, pill disappears if count reaches 0) and other clients see the removal in real-time
+- [x] AC 8: Given a user clicks a reaction pill for an emoji they have NOT reacted with, when the click fires, then their reaction is added (count increments) and other clients see it in real-time
+- [x] AC 9: Given a message has reactions and the user loads the channel via REST, when the messages load, then existing reactions are displayed correctly with counts and user highlighting
+- [x] AC 10: Given the same user tries to add the same emoji reaction twice to the same message, when the second add fires, then the operation is idempotent — no duplicate, no error
+- [x] AC 11: Given a user tries to remove a reaction that doesn't exist, when the remove fires, then nothing happens — no error, no broadcast
+- [x] AC 12: Given a message is deleted (cascade), when the message is removed from DB, then all associated reactions are also deleted (FK cascade)
 
 ## Additional Context
 

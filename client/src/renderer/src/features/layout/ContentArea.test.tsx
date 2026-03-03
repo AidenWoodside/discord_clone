@@ -37,15 +37,29 @@ vi.mock('../../services/apiClient', () => ({
   configureApiClient: vi.fn(),
 }));
 
-// Mock useAuthStore
-vi.mock('../../stores/useAuthStore', () => ({
-  default: {
-    getState: () => ({
-      groupKey: new Uint8Array(32),
-      user: { id: 'user-1', username: 'test', role: 'user' },
-    }),
-  },
+// Mock reactionService
+vi.mock('../../services/reactionService', () => ({
+  toggleReaction: vi.fn(),
 }));
+
+// Mock emoji-mart
+vi.mock('@emoji-mart/react', () => ({
+  default: () => null,
+}));
+vi.mock('@emoji-mart/data', () => ({
+  default: {},
+}));
+
+// Mock useAuthStore — support both hook usage `useAuthStore(selector)` and `useAuthStore.getState()`
+vi.mock('../../stores/useAuthStore', () => {
+  const state = {
+    groupKey: new Uint8Array(32),
+    user: { id: 'user-1', username: 'test', role: 'user' },
+  };
+  const store = (selector?: (s: typeof state) => unknown) => selector ? selector(state) : state;
+  store.getState = () => state;
+  return { default: store };
+});
 
 import { ContentArea } from './ContentArea';
 
@@ -72,6 +86,7 @@ beforeEach(() => {
   useUIStore.setState({ isMemberListVisible: true });
   useMessageStore.setState({
     messages: new Map(),
+    reactions: new Map(),
     hasMoreMessages: new Map(),
     isLoadingMore: false,
     currentChannelId: null,

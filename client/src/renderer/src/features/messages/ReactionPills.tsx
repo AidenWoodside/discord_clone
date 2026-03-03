@@ -1,0 +1,80 @@
+import React, { useState } from 'react';
+import useMessageStore from '../../stores/useMessageStore';
+import type { ReactionSummary } from '../../stores/useMessageStore';
+import useAuthStore from '../../stores/useAuthStore';
+import { toggleReaction } from '../../services/reactionService';
+import { Tooltip } from 'radix-ui';
+import { EmojiPicker } from './EmojiPicker';
+
+interface ReactionPillsProps {
+  messageId: string;
+  channelId: string;
+}
+
+const EMPTY_REACTIONS: ReactionSummary[] = [];
+
+export function ReactionPills({ messageId, channelId }: ReactionPillsProps): React.ReactNode {
+  const reactions = useMessageStore((s) => s.reactions.get(messageId) ?? EMPTY_REACTIONS);
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const [showPicker, setShowPicker] = useState(false);
+
+  if (reactions.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1 mt-1 items-center">
+      {reactions.map((reaction) => {
+        const hasReacted = currentUserId ? reaction.userIds.includes(currentUserId) : false;
+        return (
+          <Tooltip.Provider key={reaction.emoji} delayDuration={300}>
+            <Tooltip.Root>
+              <Tooltip.Trigger asChild>
+                <button
+                  type="button"
+                  onClick={() => toggleReaction(messageId, channelId, reaction.emoji)}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition-colors ${
+                    hasReacted
+                      ? 'border-accent-primary bg-accent-primary/10 text-text-primary'
+                      : 'border-border-default bg-bg-tertiary hover:bg-bg-hover text-text-muted'
+                  }`}
+                >
+                  <span>{reaction.emoji}</span>
+                  <span>{reaction.count}</span>
+                </button>
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content
+                  className="bg-bg-floating text-text-primary text-xs rounded px-2 py-1 shadow-lg border border-border-default"
+                  sideOffset={5}
+                >
+                  {reaction.userIds.length <= 3
+                    ? reaction.userIds.join(', ')
+                    : `${reaction.userIds.slice(0, 3).join(', ')} and ${reaction.userIds.length - 3} more`}
+                  <Tooltip.Arrow className="fill-bg-floating" />
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
+          </Tooltip.Provider>
+        );
+      })}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setShowPicker(!showPicker)}
+          className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs border border-border-default bg-bg-tertiary hover:bg-bg-hover text-text-muted"
+          aria-label="Add reaction"
+        >
+          +
+        </button>
+        {showPicker && (
+          <EmojiPicker
+            onSelect={(emoji) => {
+              toggleReaction(messageId, channelId, emoji);
+              setShowPicker(false);
+            }}
+            onClose={() => setShowPicker(false)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

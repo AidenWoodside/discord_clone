@@ -143,7 +143,7 @@ jobs:
         uses: docker/setup-buildx-action@v3.12.0
 
       - name: Build server image for scanning
-        uses: docker/build-push-action@v6.19.2
+        uses: docker/build-push-action@v7.0.0
         with:
           context: .
           file: server/Dockerfile

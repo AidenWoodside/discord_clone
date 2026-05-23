@@ -17,9 +17,9 @@
   },
   "devDependencies": {
     "@types/libsodium-wrappers": "^0.8.2",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.7"
   },
   "dependencies": {
-    "libsodium-wrappers": "^0.8.2"
+    "libsodium-wrappers": "^0.8.4"
   }
 }

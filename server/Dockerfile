@@ -1,5 +1,5 @@
 # Stage 1: Build — download prebuilt mediasoup worker + compile TypeScript
-FROM node:25-slim AS builder
+FROM node:26-slim AS builder
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ RUN npm run build -w shared && npm run build -w server
 RUN npm prune --omit=dev
 
 # Stage 2: Production — minimal runtime image
-FROM node:25-slim
+FROM node:26-slim
 
 # Remove npm (not needed at runtime) to eliminate bundled vulnerable deps
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
